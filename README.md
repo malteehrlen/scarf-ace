@@ -90,7 +90,27 @@ npm run build
 
 Stack: Vue 3 + Vite + TypeScript, ProseMirror for editing, jsPDF for PDF.
 
-## Fonts
+## Deployment
 
-Courier Prime (`public/fonts`) is © Quote-Unquote Apps, licensed under the SIL Open Font License
-(`public/fonts/OFL.txt`).
+The app is static files only. `.github/workflows/deploy.yml` tests, builds and publishes it to
+GitHub Pages on every push to `main` (one-time setup: repository Settings → Pages → Source:
+"GitHub Actions"). The build uses relative paths (`base: './'` in `vite.config.ts`), so it works at
+`https://<user>.github.io/<repo>/` or on a custom domain without changes.
+
+Scripts live in the browser's localStorage for the site's origin. Moving the app to another address
+(e.g. adding a custom domain later) starts with an empty library there, so users would need to
+re-import their Fountain backups.
+
+## License
+
+[MIT](LICENSE) © 2026 Malte Ehrlen.
+
+The Courier Prime font in `public/fonts` is © The Courier Prime Project Authors, licensed under the
+SIL Open Font License ([`public/fonts/OFL.txt`](public/fonts/OFL.txt)).
+
+Third-party libraries keep their own licenses (all permissive: MIT, plus Apache-2.0 for DOMPurify and
+MIT/Zlib for pako). Every build writes `third-party-licenses.txt` with the license text of each
+package in the bundle; the deployed app links to it from Help › About.
+
+Final Draft is a trademark of its owner; Scarf Ace is not affiliated with or endorsed by it and only
+reads and writes the `.fdx` file format for compatibility.

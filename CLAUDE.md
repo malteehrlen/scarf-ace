@@ -41,6 +41,16 @@ Browser screenplay editor (Vue 3 + Vite + TS, ProseMirror, jsPDF). See README fo
   hardcode colors in rules; derive tints with `color-mix` from a token. Theme logic: `src/lib/theme.ts`,
   mirrored by the inline script in `index.html` (keep them in sync).
 
+## Deployment
+- GitHub Pages via `.github/workflows/deploy.yml` (tests → build → publish on push to `main`).
+- `base: './'` in `vite.config.ts`: never reference assets with absolute `/…` paths (CSS `url()` in
+  `src/` is rebased by Vite; runtime fetches use `import.meta.env.BASE_URL`).
+
+## Licenses
+- The app is MIT. `build/third-party-licenses.ts` (a Vite plugin) writes `third-party-licenses.txt`
+  into every build from the packages actually bundled, and fails the build if one has no license
+  file. Before adding a runtime dependency, check its license is permissive (no GPL/AGPL/LGPL).
+
 ## Conventions
 - Element text is stored as typed: no forced caps, parentheticals without parens (case/parens are
   applied at display/export time), plus Fountain inline markup (emphasis, notes, scene numbers).

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { APP_NAME, APP_VERSION, CREATOR_EMAIL, FEEDBACK_URL } from '../lib/about'
 
 const dialog = ref<HTMLDialogElement>()
+const BASE = import.meta.env.BASE_URL
 defineExpose({ open: () => dialog.value?.showModal() })
 </script>
 
@@ -25,16 +26,16 @@ defineExpose({ open: () => dialog.value?.showModal() })
       <div class="fine-print">
         <h3>The fine print</h3>
         <p>
-          {{ APP_NAME }} is free to use. There is exactly one condition: by using it, you agree that if your script gets
-          made, you invite
-          <a :href="`mailto:${CREATOR_EMAIL}`" :data-tip="`Email ${CREATOR_EMAIL}`">the creator</a>
+          {{ APP_NAME }} is free and open source (MIT). Just one small request: if your script gets made, please
+          <a :href="`mailto:${CREATOR_EMAIL}`" :data-tip="`Email ${CREATOR_EMAIL}`">invite me</a>
           to the premiere.
         </p>
       </div>
 
       <p class="hint">
         Scripts use the open <a href="https://fountain.io" target="_blank" rel="noopener" data-tip="fountain.io (opens in a new tab)">Fountain</a> format. Typeset in
-        Courier Prime by Quote-Unquote Apps (SIL Open Font License).
+        Courier Prime (© The Courier Prime Project Authors, SIL Open Font License). Built with open source software:
+        <a :href="`${BASE}third-party-licenses.txt`" target="_blank" rel="noopener" data-tip="Licenses of the libraries Scarf Ace uses (opens in a new tab)">licenses</a>.
       </p>
       <div class="actions">
         <button class="primary" data-tip="Close" data-tip-kbd="Esc" @click="dialog?.close()">Close</button>
