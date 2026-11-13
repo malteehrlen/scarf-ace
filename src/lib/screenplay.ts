@@ -1,3 +1,5 @@
+import { emptyBackup, type BackupState } from './backup'
+
 // Core screenplay model. Formatting is derived entirely from an element's type,
 // so the writer can never produce an incorrectly formatted script.
 
@@ -31,6 +33,7 @@ export interface Script {
   id: string
   titlePage: TitlePage
   elements: ScriptElement[]
+  backup: BackupState
   createdAt: number
   updatedAt: number
 }
@@ -155,6 +158,7 @@ export function newScript(elements?: ScriptElement[], titlePage?: Partial<TitleP
     id: `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     titlePage: { ...emptyTitlePage(), ...titlePage },
     elements: elements?.length ? elements : [{ type: 'scene', text: '' }],
+    backup: emptyBackup(),
     createdAt: now,
     updatedAt: now,
   }

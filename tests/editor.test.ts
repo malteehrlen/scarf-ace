@@ -77,3 +77,31 @@ describe('editor commands', () => {
     expect(types(s)).toEqual(['action'])
   })
 })
+
+describe('cursor highlight', () => {
+  /** Element indexes carrying a node decoration with the given class. */
+  function decorated(state: EditorState, cls: string) {
+    const out: number[] = []
+    for (const plugin of state.plugins) {
+      const set = plugin.props.decorations?.call(plugin, state)
+      if (!set || !('find' in set)) continue
+      for (const d of (set as import('prosemirror-view').DecorationSet).find()) {
+        if ((d as unknown as { type: { attrs?: { class?: string } } }).type.attrs?.class === cls) {
+          out.push(state.doc.resolve(d.from).index(0))
+        }
+      }
+    }
+    return out
+  }
+
+  const els: ScriptElement[] = [
+    { type: 'scene', text: 'INT. A' },
+    { type: 'action', text: 'B' },
+    { type: 'action', text: '' },
+  ]
+
+  it('tints only the element holding the cursor, including empty ones', () => {
+    expect(decorated(at(createState(els), 1), 'el-current')).toEqual([1])
+    expect(decorated(at(createState(els), 2), 'el-current')).toEqual([2])
+  })
+})

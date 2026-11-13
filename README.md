@@ -12,6 +12,10 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 - **Fountain import/export** for interoperability with Trelby, Highland, Fade In, etc. Copy/paste
   also speaks Fountain.
 - **Autosave** to localStorage, with multiple scripts.
+- **Dark mode.** Follows the system setting by default; the toolbar button cycles System → Light →
+  Dark and remembers the choice.
+- **Backup reminders.** localStorage is easy to lose, so after you add a page or write for 30 active
+  minutes, a card nudges you to download a Fountain backup. Ctrl/⌘+S downloads one any time.
 
 ## Keyboard
 
@@ -22,9 +26,29 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 | Tab | Action ⇄ Character, Dialogue ⇄ Parenthetical |
 | Shift+Tab | Cycle element type backwards |
 | Ctrl+Alt+1…7 (⌘⌥ on Mac) | Scene, Action, Character, Parenthetical, Dialogue, Transition, Shot |
+| Ctrl+S / ⌘S | Download a Fountain backup |
 | `(` in empty dialogue | Starts a parenthetical; `)` at its end returns to dialogue |
 
 Typing `INT.` / `EXT.` in an action line makes it a scene heading; `CUT TO:` makes a transition.
+
+## Vim mode
+
+Optional; toggle **Vim** in the status bar (remembered per browser). Each screenplay element is a
+"line", so `j`/`k`, `dd`, `yy`/`p` work on whole elements and keep their types.
+
+- Modes: normal, insert, visual (`v`), visual-line (`V`); mode and pending keys show in the status bar
+- Motions: `h j k l w b e W B E 0 ^ $ gg G f F t T ; ,` with counts; `[[` / `]]` jump between scenes
+- Screen rows (wrapped lines): `gj gk`, `gh gl` (row start/end, Helix-style) and `g0 g^ g$`;
+  `H M L` for the top, middle and bottom visible rows
+- Operators `d c y` with motions, `dd cc yy`, text objects `iw aw i" a" i' a' i( a( i[ a[ i{ a{`
+- `x X s S D C Y p P J r ~ u Ctrl-r . o O i a I A`, `Ctrl-d Ctrl-u zz`
+- `o` opens the next element in screenplay order (on a character name it opens dialogue)
+- Search: `/` `?` with incremental highlighting, `n N * #`, `:noh`. Smartcase (case-insensitive
+  unless the pattern has a capital); patterns are JS regexes, with `\<` `\>` as word boundaries
+- `:w` downloads a Fountain backup
+- Tab and Ctrl+Alt+1…7 still change the element type in any mode
+
+Not supported: named registers, macros, marks, `:s` substitution, `d/pattern`, and most ex commands.
 
 ## Development
 

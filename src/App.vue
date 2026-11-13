@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import ScriptEditor, { type EditorStatus } from './components/ScriptEditor.vue'
 import TitlePageDialog from './components/TitlePageDialog.vue'
 import LibraryDialog from './components/LibraryDialog.vue'
+import SceneTree from './components/SceneTree.vue'
+import BackupReminder from './components/BackupReminder.vue'
+import ThemeMenu from './components/ThemeMenu.vue'
 import {
   ELEMENT_LABELS,
   ELEMENT_TYPES,
@@ -16,6 +19,15 @@ import {
 } from './lib/screenplay'
 import { deleteScript, lastOpenedId, listScripts, loadScript, sampleScript, saveScript } from './lib/storage'
 import { fromFountain, toFountain } from './lib/fountain'
+import { paginate } from './lib/paginate'
+import {
+  applyTheme,
+  onSystemThemeChange,
+  readThemePreference,
+  saveThemePreference,
+  type ThemePreference,
+} from './lib/theme'
+import { MINUTE, markBackedUp, recordActivity, reminderReason, snoozeAt, type Snooze } from './lib/backup'
 
 const editor = ref<InstanceType<typeof ScriptEditor>>()
 const titleDialog = ref<InstanceType<typeof TitlePageDialog>>()
@@ -26,7 +38,49 @@ const saveState = ref<'saved' | 'pending' | 'error'>('saved')
 const busy = ref(false)
 const scripts = ref(listScripts())
 const script = ref<Script>(initialScript())
-const status = ref<EditorStatus>({ type: 'scene', page: 1, pageCount: 1 })
+const status = ref<EditorStatus>({
+  type: 'scene',
+  index: 0,
+  page: 1,
+  pageCount: 1,
+  pageStarts: [],
+  vim: { enabled: false, mode: 'normal', pending: '', message: '' },
+})
+/** False between switching scripts and the new editor reporting its page count. */
+const statusReady = ref(false)
+const snooze = ref<Snooze | null>(null)
+let lastEdit: number | null = null
+const theme = ref<ThemePreference>(readThemePreference())
+watch(theme, (preference) => {
+  saveThemePreference(preference)
+  applyTheme(preference)
+})
+const stopFollowingSystem = onSystemThemeChange(() => {
+  if (theme.value === 'system') applyTheme('system')
+})
+onBeforeUnmount(stopFollowingSystem)
+
+const VIM_KEY = 'scarfAce:vim'
+const vimEnabled = ref(readVimSetting())
+function readVimSetting() {
+  try {
+    return localStorage.getItem(VIM_KEY) === 'on'
+  } catch {
+    return false
+  }
+}
+watch(vimEnabled, (on) => {
+  try {
+    localStorage.setItem(VIM_KEY, on ? 'on' : 'off')
+  } catch {
+    // Not persisting the preference is harmless.
+  }
+})
+const VIM_MODE_LABELS = { normal: 'NORMAL', insert: 'INSERT', visual: 'VISUAL', 'visual-line': 'V-LINE' } as const
+
+const now = ref(Date.now())
+const clock = setInterval(() => (now.value = Date.now()), 30_000)
+onBeforeUnmount(() => clearInterval(clock))
 
 function initialScript(): Script {
   const last = lastOpenedId()
@@ -66,12 +120,22 @@ watch(() => script.value.titlePage, scheduleSave, { deep: true })
 
 function onChange(elements: ScriptElement[]) {
   script.value.elements = elements
+  script.value.backup = recordActivity(script.value.backup, lastEdit)
+  lastEdit = Date.now()
   scheduleSave()
+}
+
+function onStatus(next: EditorStatus) {
+  status.value = next
+  statusReady.value = true
 }
 
 function open(s: Script) {
   flushSave()
   script.value = s
+  statusReady.value = false
+  snooze.value = null
+  lastEdit = null
   persist(s)
 }
 
@@ -102,7 +166,10 @@ async function importFile(event: Event) {
   if (!file) return
   const { elements, titlePage } = fromFountain(await file.text())
   if (!titlePage.title) titlePage.title = file.name.replace(/\.[^.]+$/, '')
-  open(newScript(elements, titlePage))
+  const imported = newScript(elements, titlePage)
+  // The writer already has this file, so it counts as a backup.
+  imported.backup = markBackedUp(paginate(elements).pages.length)
+  open(imported)
 }
 
 function download(name: string, content: string, type: string) {
@@ -114,7 +181,39 @@ function download(name: string, content: string, type: string) {
 
 function exportFountain() {
   download(`${scriptFileName(script.value)}.fountain`, toFountain(script.value.elements, script.value.titlePage), 'text/plain')
+  script.value.backup = markBackedUp(status.value.pageCount)
+  snooze.value = null
+  clearTimeout(saveTimer)
+  persist(script.value)
 }
+
+const reminder = computed(() =>
+  statusReady.value ? reminderReason(script.value.backup, status.value.pageCount, snooze.value) : null,
+)
+
+function remindLater() {
+  snooze.value = snoozeAt(script.value.backup, status.value.pageCount)
+}
+
+const backupLabel = computed(() => {
+  const at = script.value.backup.lastAt
+  if (at == null) return 'Not backed up'
+  const minutes = Math.floor((now.value - at) / MINUTE)
+  if (minutes < 1) return 'Backed up just now'
+  if (minutes < 60) return `Backed up ${minutes} min ago`
+  if (minutes < 24 * 60) return `Backed up ${Math.floor(minutes / 60)} h ago`
+  return `Backed up ${new Date(at).toLocaleDateString()}`
+})
+
+// Writers press Ctrl/Cmd+S out of habit; make it do the one save that leaves the browser.
+function onKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    exportFountain()
+  }
+}
+window.addEventListener('keydown', onKeydown)
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 async function exportAsPdf() {
   busy.value = true
@@ -129,14 +228,6 @@ async function exportAsPdf() {
   }
 }
 
-const scenes = computed(() => {
-  const out: { index: number; number: number; text: string }[] = []
-  script.value.elements.forEach((el, index) => {
-    if (el.type === 'scene') out.push({ index, number: out.length + 1, text: el.text.trim().toUpperCase() || '(untitled scene)' })
-  })
-  return out
-})
-
 const typeModel = computed({
   get: () => status.value.type,
   set: (t: ElementType) => editor.value?.setType(t),
@@ -144,6 +235,7 @@ const typeModel = computed({
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const shortcut = (i: number) => `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}${i + 1}`
+const saveShortcut = isMac ? '⌘S' : 'Ctrl+S'
 </script>
 
 <template>
@@ -161,44 +253,67 @@ const shortcut = (i: number) => `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}${i + 1}`
       <span class="sep" />
       <button class="title-btn" @click="titleDialog?.open()">{{ script.titlePage.title || 'Untitled' }}</button>
       <span class="spacer" />
+      <ThemeMenu v-model="theme" />
       <button @click="exportFountain">Export Fountain</button>
       <button class="primary" :disabled="busy" @click="exportAsPdf">{{ busy ? 'Exporting…' : 'Export PDF' }}</button>
     </header>
 
     <main class="workspace">
       <aside class="sidebar">
-        <h3>Scenes</h3>
-        <ol v-if="scenes.length" class="scenes">
-          <li v-for="s in scenes" :key="s.index">
-            <button class="link" @click="editor?.scrollToElement(s.index)">
-              <span class="num">{{ s.number }}</span>{{ s.text }}
-            </button>
-          </li>
-        </ol>
-        <p v-else class="hint">No scenes yet. Start a line with INT. or EXT.</p>
+        <SceneTree
+          :elements="script.elements"
+          :active="status.index"
+          :page-starts="status.pageStarts"
+          @select="editor?.scrollToElement($event)"
+        />
       </aside>
       <section class="desk">
         <ScriptEditor
           ref="editor"
           :key="script.id"
           :elements="script.elements"
+          :vim="vimEnabled"
           @change="onChange"
-          @status="status = $event"
+          @write="exportFountain"
+          @status="onStatus"
         />
       </section>
     </main>
 
     <footer class="statusbar">
+      <template v-if="status.vim.enabled">
+        <span class="vim-mode" :class="`vim-mode-${status.vim.mode}`">{{ VIM_MODE_LABELS[status.vim.mode] }}</span>
+        <span v-if="status.vim.pending" class="vim-pending">{{ status.vim.pending }}</span>
+        <span v-else-if="status.vim.message" class="vim-message">{{ status.vim.message }}</span>
+      </template>
       <strong>{{ ELEMENT_LABELS[status.type] }}</strong>
       <span>Enter → {{ ELEMENT_LABELS[NEXT_ON_ENTER[status.type]] }}</span>
       <span>Tab → {{ ELEMENT_LABELS[NEXT_ON_TAB[status.type]] }}</span>
       <span class="spacer" />
+      <button
+        class="vim-toggle"
+        :class="{ on: vimEnabled }"
+        :aria-pressed="vimEnabled"
+        title="Vim keybindings"
+        @click="vimEnabled = !vimEnabled"
+      >
+        Vim
+      </button>
       <span>Page {{ status.page }} of {{ status.pageCount }}</span>
+      <button
+        class="backup-status"
+        :class="{ due: reminder }"
+        :title="`Download a Fountain backup (${saveShortcut})`"
+        @click="exportFountain"
+      >
+        {{ backupLabel }}
+      </button>
       <span :class="['save', saveState]">{{
         saveState === 'saved' ? 'Saved locally' : saveState === 'pending' ? 'Saving…' : 'Save failed — storage full?'
       }}</span>
     </footer>
 
+    <BackupReminder :reason="reminder" :shortcut="saveShortcut" @backup="exportFountain" @later="remindLater" />
     <TitlePageDialog ref="titleDialog" v-model="script.titlePage" />
     <LibraryDialog
       ref="libraryDialog"

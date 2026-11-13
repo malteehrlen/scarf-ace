@@ -1,13 +1,15 @@
 // ProseMirror setup: a document is a flat list of typed screenplay elements.
 import { Fragment, Schema, Slice, type Node as PMNode } from 'prosemirror-model'
 import { EditorState, Plugin, PluginKey, TextSelection, type Command } from 'prosemirror-state'
-import { Decoration, DecorationSet } from 'prosemirror-view'
+import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view'
 import { keymap } from 'prosemirror-keymap'
 import { history, redo, undo } from 'prosemirror-history'
 import { baseKeymap } from 'prosemirror-commands'
 import { fromFountain, toFountain } from './fountain'
 import { paginate } from './paginate'
+import { vimPlugin } from './vim'
 import {
+  ELEMENT_LABELS,
   ELEMENT_TYPES,
   NEXT_ON_ENTER,
   NEXT_ON_TAB,
@@ -232,12 +234,73 @@ const fountainClipboard = new Plugin({
   },
 })
 
-export function createState(elements: ScriptElement[]): EditorState {
+/** Small tag naming the current element's type, drawn in the margin beside it. */
+function typeLabel(type: ElementType) {
+  const dom = document.createElement('span')
+  dom.className = `el-label t-${type}`
+  dom.contentEditable = 'false'
+  dom.setAttribute('aria-hidden', 'true')
+  dom.textContent = ELEMENT_LABELS[type]
+  return dom
+}
+
+/** Position of an element being flashed after a jump, or null. */
+const flashKey = new PluginKey<number | null>('flash')
+const FLASH_MS = 900
+
+/** Tints the element holding the cursor, and briefly flashes elements jumped to. */
+const cursorHighlight = new Plugin<number | null>({
+  key: flashKey,
+  state: {
+    init: () => null,
+    apply(tr, value) {
+      const meta = tr.getMeta(flashKey)
+      if (meta !== undefined) return meta
+      return value == null ? null : tr.mapping.map(value)
+    },
+  },
+  props: {
+    decorations(state) {
+      const decorations: Decoration[] = []
+      const { $head } = state.selection
+      if ($head.depth >= 1) {
+        const start = $head.before(1)
+        const type = validType($head.node(1).attrs.type)
+        decorations.push(
+          Decoration.node(start, start + $head.node(1).nodeSize, { class: 'el-current' }),
+          Decoration.widget(start + 1, () => typeLabel(type), { side: -1, key: `label-${type}`, ignoreSelection: true }),
+        )
+      }
+      const flash = flashKey.getState(state)
+      const node = flash == null ? null : state.doc.nodeAt(flash)
+      if (flash != null && node) decorations.push(Decoration.node(flash, flash + node.nodeSize, { class: 'el-flash' }))
+      return DecorationSet.create(state.doc, decorations)
+    },
+  },
+})
+
+/** Briefly highlights the element starting at `pos` so the eye can find it after a jump. */
+export function flashElement(view: EditorView, pos: number) {
+  view.dispatch(view.state.tr.setMeta(flashKey, pos).setMeta('addToHistory', false))
+  setTimeout(() => {
+    if (view.isDestroyed || flashKey.getState(view.state) == null) return
+    view.dispatch(view.state.tr.setMeta(flashKey, null).setMeta('addToHistory', false))
+  }, FLASH_MS)
+}
+
+export interface EditorOptions {
+  vim?: boolean
+  /** Called for Vim's :w. */
+  onWrite?: () => void
+}
+
+export function createState(elements: ScriptElement[], options: EditorOptions = {}): EditorState {
   const typeKeys = Object.fromEntries(ELEMENT_TYPES.map((t, i) => [`Mod-Alt-${i + 1}`, setType(t)]))
   return EditorState.create({
     doc: docFromElements(elements),
     plugins: [
       history(),
+      vimPlugin({ enabled: Boolean(options.vim), enter, onWrite: options.onWrite }),
       smartTyping,
       keymap({
         Enter: enter,
@@ -252,6 +315,7 @@ export function createState(elements: ScriptElement[]): EditorState {
       }),
       keymap(baseKeymap),
       layout,
+      cursorHighlight,
       fountainClipboard,
     ],
   })

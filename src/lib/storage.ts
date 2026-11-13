@@ -1,3 +1,4 @@
+import { emptyBackup } from './backup'
 import { emptyTitlePage, newScript, type Script } from './screenplay'
 
 const INDEX_KEY = 'scarfAce:index'
@@ -26,7 +27,7 @@ export function listScripts(): ScriptSummary[] {
 export function loadScript(id: string): Script | null {
   const script = readJson<Script | null>(scriptKey(id), null)
   if (!script) return null
-  return { ...script, titlePage: { ...emptyTitlePage(), ...script.titlePage } }
+  return { ...script, titlePage: { ...emptyTitlePage(), ...script.titlePage }, backup: script.backup ?? emptyBackup() }
 }
 
 /** Throws if storage is full or unavailable so the caller can surface it. */
