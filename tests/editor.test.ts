@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EditorState, TextSelection, type Command } from 'prosemirror-state'
 import { createState, elementsFromDoc, enter, setType, shiftTab, tab } from '../src/lib/editor'
+import type { Transaction } from 'prosemirror-state'
 import type { ScriptElement } from '../src/lib/screenplay'
 
 function run(state: EditorState, cmd: Command) {
@@ -103,5 +104,49 @@ describe('cursor highlight', () => {
   it('tints only the element holding the cursor, including empty ones', () => {
     expect(decorated(at(createState(els), 1), 'el-current')).toEqual([1])
     expect(decorated(at(createState(els), 2), 'el-current')).toEqual([2])
+  })
+})
+
+describe('emphasis and Fountain extras in the editor', () => {
+  it('round-trips emphasis markup through the document', () => {
+    const els: ScriptElement[] = [{ type: 'action', text: 'A **bold** and *italic* _move_, 5 \\* 3.' }]
+    const s = createState(els)
+    expect(s.doc.child(0).textContent).toBe('A bold and italic move, 5 * 3.')
+    expect(elementsFromDoc(s.doc)).toEqual(els)
+  })
+
+  it('Mod-b toggles bold on the selection', () => {
+    let s = createState([{ type: 'action', text: 'one two' }])
+    s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, 5, 8)))
+    const bold = s.plugins.flatMap((p) => (p.props.handleKeyDown ? [p] : []))
+    let handled = false
+    for (const p of bold) {
+      if (handled) break
+      handled = Boolean(
+        p.props.handleKeyDown!.call(p, { state: s, dispatch: (tr: Transaction) => (s = s.apply(tr)) } as never, { type: 'keydown', key: 'b', keyCode: 66, ctrlKey: true, metaKey: false, altKey: false, shiftKey: false } as never),
+      )
+    }
+    expect(elementsFromDoc(s.doc)[0].text).toBe('one **two**')
+  })
+
+  it('keeps notes and scene numbers as text, and dual on characters', () => {
+    const els: ScriptElement[] = [
+      { type: 'scene', text: 'INT. A #4#' },
+      { type: 'character', text: 'MAYA', dual: true },
+      { type: 'action', text: 'Wait. [[cut?]]' },
+    ]
+    expect(elementsFromDoc(createState(els).doc)).toEqual(els)
+  })
+
+  it('turns Fountain shortcuts typed in action into elements', () => {
+    const typed = (text: string) => {
+      let s = at(createState([{ type: 'action', text: '' }]), 0)
+      for (const ch of text) s = typeText(s, ch)
+      return elementsFromDoc(s.doc)[0]
+    }
+    expect(typed('===')).toEqual({ type: 'pagebreak', text: '' })
+    expect(typed('# Act One')).toEqual({ type: 'section', text: '# Act One' })
+    expect(typed('= She stays.')).toEqual({ type: 'synopsis', text: 'She stays.' })
+    expect(typed('> THE END <')).toEqual({ type: 'centered', text: 'THE END' })
   })
 })

@@ -47,6 +47,10 @@
   --t-dialogue: #3a8a3f;
   --t-transition: #b07a12;
   --t-shot: #2f6db5;
+  --t-centered: #5b6b7f;
+  --t-section: #8a5a1c;
+  --t-synopsis: #6b6a68;
+  --t-pagebreak: #6b6a68;
   --tree-guide: #d9d5ce;
   --tree-hover: rgba(0, 0, 0, 0.045);
   --shadow-paper: 0 1px 3px rgba(0, 0, 0, 0.15), 0 8px 24px rgba(0, 0, 0, 0.08);
@@ -73,6 +77,10 @@
   --t-dialogue: #79c97d;
   --t-transition: #e0ac4a;
   --t-shot: #73a7ec;
+  --t-centered: #9fb0c6;
+  --t-section: #e0b070;
+  --t-synopsis: #9b988f;
+  --t-pagebreak: #9b988f;
   --tree-guide: #3a3a40;
   --tree-hover: rgba(255, 255, 255, 0.05);
   --shadow-paper: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -236,6 +244,10 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .t-dialogue { --t: var(--t-dialogue); }
 .t-transition { --t: var(--t-transition); }
 .t-shot { --t: var(--t-shot); }
+.t-centered { --t: var(--t-centered); }
+.t-section { --t: var(--t-section); }
+.t-synopsis { --t: var(--t-synopsis); }
+.t-pagebreak { --t: var(--t-pagebreak); }
 
 .tree { padding: 0 0 24px; font-size: 12px; }
 .tree-head {
@@ -273,6 +285,16 @@ button.icon.on { color: var(--accent); background: var(--tree-active); }
 .scene.is-current .scene-num { color: var(--accent); }
 .scene-heading { flex: 1; min-width: 0; font-family: var(--mono); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scene-page { flex: none; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tree-section {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  margin: 10px 0 2px; padding: 2px 8px 2px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t-section);
+}
+.tree-section.depth-2 { padding-left: 18px; font-size: 10.5px; }
+.tree-section.depth-3 { padding-left: 26px; font-size: 10px; font-weight: 600; }
+.tree-section:hover { background: var(--tree-hover); }
+.tree-section-synopsis { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 400; font-style: italic; letter-spacing: 0; text-transform: none; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scene-synopsis { padding-left: calc(1.8em + 6px); font-size: 11.5px; font-style: italic; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cast { display: flex; flex-wrap: wrap; gap: 3px; padding-left: calc(1.8em + 6px); }
 .chip {
   font-size: 9.5px; font-weight: 600; letter-spacing: 0.03em; padding: 1px 6px; border-radius: 99px;
@@ -349,6 +371,45 @@ button.icon.on { color: var(--accent); background: var(--tree-active); }
 .script .el-parenthetical .ProseMirror-trailingBreak { display: none; }
 .script .el-dialogue { margin-left: 10ch; width: 35ch; margin-top: 0; }
 .script .el-transition { text-align: right; }
+.script .el-centered { text-align: center; }
+.script { display: flow-root; } /* contains dual-dialogue floats */
+
+/* Outline elements and page breaks: visible while writing, never printed. */
+.script .el-section { color: var(--t-section); font-weight: 700; }
+.script .el-synopsis { color: var(--t-synopsis); font-style: italic; }
+/* A dashed rule with a label in the middle (the label masks the rule behind it). */
+.script p.el-pagebreak {
+  text-align: center; color: var(--t-pagebreak); caret-color: transparent;
+  background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 8px) center / 100% 1px no-repeat;
+}
+.script .el-pagebreak::before {
+  content: 'Page break'; padding: 0 1.5ch; background: var(--paper);
+  font: 600 9px/12pt system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.script .el-pagebreak .ProseMirror-trailingBreak { display: none; }
+.script .md-note {
+  color: var(--muted); font-style: italic;
+  background: color-mix(in srgb, var(--t-transition) 12%, transparent); border-radius: 2px;
+}
+.script .md-scenenum { color: var(--muted); }
+/* Printed, but added automatically rather than typed. */
+.script .auto-contd { color: var(--muted); }
+
+/* Dual dialogue: the left speech floats in its column, the right one flows beside it. Widths match DUAL. */
+.script .el-dual-left { float: left; clear: left; }
+.script .el-dual-left.el-character { margin-left: 8ch; width: 21ch; }
+.script .el-dual-left.el-parenthetical { margin-left: 3ch; width: 22ch; }
+.script .el-dual-left.el-dialogue { margin-left: 0; width: 28ch; }
+.script .el-dual-right.el-character { margin-left: 39ch; width: 21ch; }
+.script .el-dual-right.el-parenthetical { margin-left: 34ch; width: 22ch; }
+.script .el-dual-right.el-dialogue { margin-left: 31ch; width: 28ch; }
+.script .el-after-dual { clear: both; }
+.script .el-character[data-dual='true'] { position: relative; }
+.script .el-character[data-dual='true']::after {
+  content: 'dual'; position: absolute; left: calc(100% + 1ch); top: 0;
+  font: 600 9px/12pt system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--t-character); white-space: nowrap;
+}
 /* Cursor location: a faint tint on the current element, and a pulse after jumping to one. */
 .script .el-current { background: var(--cursor-tint); box-shadow: 0 0 0 4px var(--cursor-tint); border-radius: 3px; }
 .script .el-flash { animation: el-flash 0.9s ease-out; }
@@ -396,9 +457,10 @@ button.icon.on { color: var(--accent); background: var(--tree-active); }
 .script .vim-match { background: var(--match); border-radius: 2px; }
 .script .vim-match-current { background: var(--match-current); box-shadow: 0 0 0 1px var(--t-transition); }
 /* After the match rules: the cursor must win when it sits on a match. */
-.script .vim-cursor { background: var(--accent); color: var(--on-accent); border-radius: 1px; }
+/* Extra-specific so no highlight (search, find) can hide the cursor, whatever the rule order. */
+.ProseMirror.script .vim-cursor { background: var(--accent); color: var(--on-accent); border-radius: 1px; }
 .script .vim-cursor-eol { display: inline-block; width: 1ch; height: 12pt; vertical-align: top; }
-.script:not(.ProseMirror-focused) .vim-cursor { background: none; color: inherit; box-shadow: inset 0 0 0 1px var(--accent); }
+.ProseMirror.script:not(.ProseMirror-focused) .vim-cursor { background: none; color: inherit; box-shadow: inset 0 0 0 1px var(--accent); }
 .statusbar .vim-mode {
   font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: 0.04em;
   padding: 1px 7px; border-radius: 4px; color: var(--paper); background: var(--t-action);
@@ -407,6 +469,56 @@ button.icon.on { color: var(--accent); background: var(--tree-active); }
 .statusbar .vim-mode-visual, .statusbar .vim-mode-visual-line { background: var(--t-character); }
 .statusbar .vim-pending { font-family: var(--mono); color: var(--ink); }
 .statusbar .vim-message { color: var(--ink); }
+
+/* --- Autocomplete --- */
+.completion {
+  position: fixed; z-index: 30; min-width: 180px; max-width: 360px; margin: 0; padding: 4px; list-style: none;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-pop);
+  font-family: var(--mono); font-size: 13px;
+}
+.completion li { padding: 4px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.completion li[aria-selected='true'] { background: var(--tree-active); color: var(--ink); }
+.completion li:not(.completion-hint):hover { background: var(--tree-hover); }
+.completion .completion-hint { cursor: default; font: 11px system-ui, sans-serif; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; border-radius: 0; }
+
+/* --- Two tabs editing the same script --- */
+.conflict-banner {
+  position: absolute; z-index: 11; top: 10px; left: 50%; transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px)); display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  background: var(--paper); border: 1px solid var(--danger); border-left-width: 4px; border-radius: 8px;
+  box-shadow: var(--shadow-pop); font-size: 13px; line-height: 1.4;
+}
+.conflict-banner > svg { flex: none; color: var(--danger); }
+.conflict-banner > span { flex: 1; }
+.conflict-banner button { flex: none; white-space: nowrap; }
+
+/* --- Find & replace --- */
+.find-bar {
+  position: absolute; z-index: 9; top: 10px; right: 26px;
+  display: flex; align-items: flex-start; gap: 4px; padding: 6px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-pop);
+}
+.find-rows { display: flex; flex-direction: column; gap: 4px; }
+.find-row { display: flex; align-items: center; gap: 2px; }
+.find-input {
+  width: 210px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--panel); color: var(--ink); font-size: 13px;
+}
+.find-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.find-count { min-width: 72px; padding: 0 6px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.find-opt, .find-btn, .find-toggle-replace {
+  border: 1px solid transparent; background: none; border-radius: 5px; padding: 2px 6px; min-width: 26px; height: 26px;
+  font-size: 12px; color: var(--muted); line-height: 1;
+}
+.find-opt:hover, .find-btn:hover:not(:disabled), .find-toggle-replace:hover { color: var(--ink); background: var(--tree-hover); }
+.find-opt.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--tree-active); }
+.find-opt .whole-word { text-decoration: underline; text-underline-offset: 3px; }
+.find-toggle-replace { align-self: stretch; height: auto; display: grid; place-items: center; padding: 0 4px; min-width: 18px; }
+.find-toggle-replace svg { fill: none; stroke: currentColor; stroke-width: 1.6; transition: transform 0.15s; }
+.find-toggle-replace[aria-expanded='true'] svg { transform: rotate(90deg); }
+.find-text-btn { font-size: 12px; padding: 3px 10px; margin-left: 4px; }
+.script .find-match { background: var(--match); border-radius: 2px; }
+.script .find-match-current { background: var(--match-current); box-shadow: 0 0 0 1px var(--t-transition); }
 
 /* --- Focus mode: only the page --- */
 .focus-enter { display: inline-grid; place-items: center; padding: 5px 7px; color: var(--muted); }
@@ -506,7 +618,31 @@ kbd {
 .help-table th, .help-table td { text-align: left; padding: 4px 18px 4px 0; border-bottom: 1px solid var(--line); }
 .help-table th { font-weight: 600; color: var(--muted); font-size: 12px; }
 .help-table .node-type { font-family: var(--mono); font-weight: 700; font-size: 12.5px; color: var(--t); }
+.help-elements .muted { color: var(--muted); font-size: 12.5px; }
 .help-tip { color: var(--muted); font-size: 13px !important; border-left: 3px solid var(--line); padding-left: 10px; }
+
+/* Final Draft import/export choices */
+.fdx { max-height: min(84vh, 760px); overflow-y: auto; }
+.fdx-question { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.fdx-question legend { padding: 0 4px; font-size: 13px; }
+.fdx-question legend span { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.fdx-question .check { font-size: 13.5px; }
+.fdx-question .check input { accent-color: var(--accent); }
+.fdx-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* Script report */
+.report h2 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.chip-btn.on { background: var(--tree-active); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--ink); }
+.report-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding-top: 14px; }
+.report-stats .stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.report-stats .stat strong { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.report-stats .stat span { font-size: 12px; color: var(--muted); }
+.report-table { width: 100%; margin-top: 12px; }
+.report-table td.num, .report-table th:not(:nth-child(2)) { font-variant-numeric: tabular-nums; }
+.report-table td.num { text-align: right; padding-right: 18px; white-space: nowrap; }
+.report-table td .link { font-family: var(--mono); font-size: 12.5px; color: var(--ink); text-align: left; }
+.report-table td .link:hover { color: var(--accent); text-decoration: underline; }
+.report-table .muted { color: var(--muted); font-size: 12px; }
 
 /* About */
 .about h2 small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 4px; }
@@ -537,6 +673,9 @@ kbd {
 .form h2 { margin: 0 0 4px; font-size: 18px; }
 .form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .form input, .form textarea { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--ink); background: var(--panel); font-size: 14px; }
+.form .check { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--ink); font-size: 14px; cursor: pointer; }
+.form .check input { margin-top: 3px; accent-color: var(--accent); }
+.form .check small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .form .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .library { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
 .library li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; }

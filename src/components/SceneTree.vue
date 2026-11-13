@@ -23,6 +23,10 @@ const NODE_NAMES: Record<ElementType, string> = {
   dialogue: 'dialogue',
   transition: 'transition',
   shot: 'shot',
+  centered: 'centered',
+  section: 'section',
+  synopsis: 'synopsis',
+  pagebreak: 'page_break',
 }
 
 const root = ref<HTMLElement>()
@@ -44,11 +48,19 @@ const activeCue = computed(() => {
   return -1
 })
 
-function pageOf(index: number) {
+/** Page each scene starts on, worked out in one pass over the page starts. */
+const scenePages = computed(() => {
+  const pages = new Map<number, number>()
+  let k = 0
   let page = 1
-  for (const start of props.pageStarts) if (start.el <= index) page = start.page
-  return page
-}
+  for (const scene of scenes.value) {
+    const at = Math.max(scene.index, 0)
+    while (k < props.pageStarts.length && props.pageStarts[k].el <= at) page = props.pageStarts[k++].page
+    pages.set(at, page)
+  }
+  return pages
+})
+const pageOf = (index: number) => scenePages.value.get(index) ?? 1
 
 function isOpen(scene: OutlineScene) {
   if (pinned.value.has(scene.number)) return true
@@ -149,6 +161,17 @@ const preview = (text: string) => text || '∅'
         class="scene"
         :class="{ 'is-current': activeScene === scene, open: isOpen(scene) }"
       >
+        <button
+          v-for="section in scene.sections"
+          :key="section.index"
+          class="tree-section"
+          :class="`depth-${Math.min(section.depth, 3)}`"
+          data-tip="Jump to this section (not printed)"
+          @click="emit('select', section.index)"
+        >
+          {{ section.text }}
+          <span v-if="section.synopsis" class="tree-section-synopsis">{{ section.synopsis }}</span>
+        </button>
         <div class="scene-row" :class="{ 'is-active': cursor === scene.index }">
           <button class="chevron" :aria-expanded="isOpen(scene)" :aria-label="isOpen(scene) ? 'Collapse scene' : 'Expand scene'"
             :data-tip="isOpen(scene) ? 'Hide this scene\'s lines' : 'Show this scene\'s lines'" @click="toggle(scene)">
@@ -164,6 +187,7 @@ const preview = (text: string) => text || '∅'
               <span class="scene-heading">{{ scene.number ? scene.heading || '(untitled scene)' : 'Before first scene' }}</span>
               <span class="scene-page">p{{ pageOf(Math.max(scene.index, 0)) }}</span>
             </span>
+            <span v-if="scene.synopsis" class="scene-synopsis">{{ scene.synopsis }}</span>
             <span v-if="scene.characters.length" class="cast">
               <span v-for="c in scene.characters" :key="c" class="chip">{{ c }}</span>
             </span>
@@ -171,7 +195,8 @@ const preview = (text: string) => text || '∅'
         </div>
 
         <div class="collapse">
-          <ul class="nodes">
+          <!-- Only expanded scenes render their lines: a feature-length script has thousands. -->
+          <ul v-if="isOpen(scene)" class="nodes">
             <li v-for="node in scene.children" :key="node.index">
               <button
                 class="node"

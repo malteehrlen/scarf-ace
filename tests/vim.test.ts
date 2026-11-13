@@ -652,3 +652,40 @@ describe('undo after visual-mode changes', () => {
     expect(e.mode).toBe('visual')
   })
 })
+
+describe('* and # ignore case (cues display in capitals but are stored as typed)', () => {
+  const els = [
+    A('The door chimes. THEO (60s) shuffles in.'),
+    { type: 'character' as const, text: 'Theo' },
+    { type: 'dialogue' as const, text: 'Call me Theo, everyone does.' },
+    A('THEO leaves.'),
+  ]
+
+  it('* from THEO in action finds the cue "Theo" next, then the dialogue', () => {
+    const e = vimEditor(els, [0, 18])
+    e.keys('*')
+    expect(e.cursor).toEqual([1, 0])
+    e.keys('n')
+    expect(e.cursor).toEqual([2, 8])
+    e.keys('n')
+    expect(e.cursor).toEqual([3, 0])
+  })
+
+  it('# goes backwards case-insensitively too', () => {
+    const e = vimEditor(els, [3, 0])
+    e.keys('#')
+    expect(e.cursor).toEqual([2, 8])
+  })
+
+  it('a typed /Theo is still smartcase, and \\c forces ignoring case', () => {
+    const e = vimEditor(els, [0, 0])
+    e.keys('/Theo<CR>')
+    expect(e.cursor).toEqual([1, 0])
+    e.keys('n')
+    expect(e.cursor).toEqual([2, 8]) // skips THEO: case-sensitive because of the capital
+    e.keys('n')
+    expect(e.cursor).toEqual([1, 0])
+    e.keys('gg/\\cTHEO<CR>')
+    expect(e.cursor).toEqual([0, 17])
+  })
+})

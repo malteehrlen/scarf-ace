@@ -1,4 +1,15 @@
-import { LAYOUT, PAGE, displayText, wrap, type ElementType, type ScriptElement } from './screenplay'
+import { runsOf, sliceSpans, type Run, type StyleSpan } from './markup'
+import { characterName } from './outline'
+import {
+  DUAL,
+  LAYOUT,
+  PAGE,
+  printable,
+  sceneNumberOf,
+  wrap,
+  type ElementType,
+  type ScriptElement,
+} from './screenplay'
 
 export interface Row {
   text: string
@@ -7,6 +18,12 @@ export interface Row {
   kind: ElementType | 'blank' | 'more'
   /** Index of the source element. */
   el: number
+  /** Styled pieces of `text`, when any of it is bold/italic/underlined. */
+  runs?: Run[]
+  /** Dual dialogue: the right-hand column's line printed alongside this one. */
+  right?: Row
+  /** First line of a scene heading: its scene number. */
+  sceneNumber?: string
 }
 
 export interface Page {
@@ -14,10 +31,18 @@ export interface Page {
   rows: Row[]
 }
 
+export interface PaginateOptions {
+  linesPerPage?: number
+  /** Add (CONT'D) when a character speaks again after action in the same scene. */
+  autoContd?: boolean
+}
+
 export interface Pagination {
   pages: Page[]
   /** For each page after the first, the index of the element it starts in. */
   pageStarts: { page: number; el: number }[]
+  /** Character cues that got an automatic (CONT'D). */
+  autoContd: number[]
 }
 
 interface Adornment {
@@ -30,6 +55,10 @@ interface Block {
   rows: Row[]
   breaks: Map<number, Adornment>
   keepWithNext: boolean
+  /** A forced page break (Fountain "==="): the index of the page-break element. */
+  pageBreak?: number
+  /** A speech that a following dual-dialogue speech can pair up with. */
+  speech?: { indexes: number[]; cue: string; suffix: string }
 }
 
 const NO_ADORNMENT: Adornment = { before: [], after: [] }
@@ -39,33 +68,63 @@ function blank(el: number): Row {
   return { text: '', indent: 0, kind: 'blank', el }
 }
 
-function elementRows(el: ScriptElement, index: number): Row[] {
-  const layout = LAYOUT[el.type]
-  return wrap(displayText(el), layout.width, layout.hangingIndent).map((text, i) => ({
-    text,
-    indent: layout.alignRight
-      ? layout.indent + layout.width - text.length
-      : layout.indent + (i > 0 ? layout.hangingIndent : 0),
-    kind: el.type,
-    el: index,
-  }))
+interface Column {
+  indent: number
+  width: number
+  hangingIndent: number
+}
+
+/** Wraps styled text into rows. `suffix` (e.g. " (CONT'D)") is appended unstyled. */
+function rowsFor(index: number, type: ElementType, text: string, spans: StyleSpan[], col: Column): Row[] {
+  const layout = LAYOUT[type]
+  let pos = 0
+  return wrap(text, col.width, col.hangingIndent).map((line, i) => {
+    const at = text.indexOf(line, pos)
+    pos = at + line.length
+    const indent = layout.alignRight
+      ? col.indent + col.width - line.length
+      : layout.alignCenter
+        ? col.indent + Math.floor((col.width - line.length) / 2)
+        : col.indent + (i > 0 ? col.hangingIndent : 0)
+    const lineSpans = sliceSpans(spans, at, at + line.length)
+    return { text: line, indent, kind: type, el: index, ...(lineSpans.length ? { runs: runsOf(line, lineSpans) } : {}) }
+  })
+}
+
+// Laid-out lines per distinct element content: unchanged elements cost a lookup, not a re-wrap.
+const rowCache = new Map<string, Row[]>()
+const ROW_CACHE_LIMIT = 20_000
+
+function elementRows(el: ScriptElement, index: number, suffix = ''): Row[] {
+  const key = `${el.type}\u0000${suffix}\u0000${el.text}`
+  let rows = rowCache.get(key)
+  if (!rows) {
+    const { text, spans } = printable(el)
+    if (rowCache.size > ROW_CACHE_LIMIT) rowCache.clear()
+    rowCache.set(key, (rows = rowsFor(-1, el.type, text + suffix, spans, LAYOUT[el.type])))
+  }
+  return rows.map((row) => ({ ...row, el: index }))
 }
 
 function spacing(type: ElementType, index: number): Row[] {
   return Array.from({ length: LAYOUT[type].spaceBefore }, () => blank(index))
 }
 
+function contdCue(cue: string): string {
+  return /\(CONT'D\)$/.test(cue) ? cue : `${cue} (CONT'D)`
+}
+
 /** A character cue with its parentheticals and dialogue (or an orphaned run of dialogue). */
-function dialogueBlock(elements: ScriptElement[], indexes: number[]): Block {
+function dialogueBlock(elements: ScriptElement[], indexes: number[], cueSuffix: string): Block {
   const rows: Row[] = []
   const breaks = new Map<number, Adornment>()
   const first = elements[indexes[0]]
-  const cue = first.type === 'character' ? displayText(first) : null
+  const cue = first.type === 'character' ? printable(first).text + cueSuffix : null
   rows.push(...spacing('character', indexes[0]))
 
   const content: Row[] = []
   for (const i of indexes) {
-    if (elements[i].type === 'character') rows.push(...elementRows(elements[i], i))
+    if (elements[i].type === 'character') rows.push(...elementRows(elements[i], i, cueSuffix))
     else content.push(...elementRows(elements[i], i))
   }
   const contentStart = rows.length
@@ -80,15 +139,41 @@ function dialogueBlock(elements: ScriptElement[], indexes: number[]): Block {
       after: cue ? [{ text: contdCue(cue), indent: LAYOUT.character.indent, kind: 'character', el: nextEl }] : [],
     })
   }
-  return { rows, breaks, keepWithNext: false }
+  return { rows, breaks, keepWithNext: false, ...(cue ? { speech: { indexes, cue, suffix: cueSuffix } } : {}) }
 }
 
-function contdCue(cue: string): string {
-  return /\(CONT'D\)$/.test(cue) ? cue : `${cue} (CONT'D)`
+/** One speech laid out in a dual-dialogue column. */
+function columnRows(elements: ScriptElement[], indexes: number[], side: 0 | 1, cueSuffix: string): Row[] {
+  const base = DUAL.columns[side]
+  return indexes.flatMap((i) => {
+    const el = elements[i]
+    const { text, spans } = printable(el)
+    const kind = el.type as 'character' | 'parenthetical' | 'dialogue'
+    const col = DUAL[kind] ?? DUAL.dialogue
+    const hanging = kind === 'parenthetical' ? 1 : 0
+    return rowsFor(i, el.type, kind === 'character' ? text + cueSuffix : text, spans, {
+      indent: base + col.indent,
+      width: col.width,
+      hangingIndent: hanging,
+    })
+  })
 }
 
-function simpleBlock(el: ScriptElement, index: number): Block {
+/** Two speeches side by side. Kept together on one page. */
+function dualBlock(elements: ScriptElement[], left: number[], leftSuffix: string, right: number[], rightSuffix: string): Block {
+  const l = columnRows(elements, left, 0, leftSuffix)
+  const r = columnRows(elements, right, 1, rightSuffix)
+  const rows: Row[] = [...spacing('character', left[0])]
+  for (let k = 0; k < Math.max(l.length, r.length); k++) {
+    const main = l[k] ?? { text: '', indent: 0, kind: 'dialogue' as const, el: r[k].el }
+    rows.push(r[k] ? { ...main, right: r[k] } : main)
+  }
+  return { rows, breaks: new Map(), keepWithNext: false }
+}
+
+function simpleBlock(el: ScriptElement, index: number, sceneNumber?: string): Block {
   const lines = elementRows(el, index)
+  if (sceneNumber && lines[0]) lines[0] = { ...lines[0], sceneNumber }
   const rows = [...spacing(el.type, index), ...lines]
   const breaks = new Map<number, Adornment>()
   if (el.type === 'action') {
@@ -98,12 +183,21 @@ function simpleBlock(el: ScriptElement, index: number): Block {
   return { rows, breaks, keepWithNext: el.type === 'scene' || el.type === 'shot' }
 }
 
-function buildBlocks(elements: ScriptElement[]): Block[] {
+const prints = (el: ScriptElement) => printable(el).text !== ''
+
+function buildBlocks(elements: ScriptElement[], options: PaginateOptions, autoContd: number[]): Block[] {
   const blocks: Block[] = []
+  let sceneCount = 0
+  let lastSpeaker: string | null = null
   let i = 0
   while (i < elements.length) {
     const el = elements[i]
-    if (!el.text.trim()) {
+    if (el.type === 'pagebreak') {
+      blocks.push({ rows: [], breaks: new Map(), keepWithNext: false, pageBreak: i })
+      i++
+      continue
+    }
+    if (!prints(el)) {
       i++
       continue
     }
@@ -112,12 +206,32 @@ function buildBlocks(elements: ScriptElement[]): Block[] {
       while (i < elements.length) {
         const t = elements[i].type
         if (t !== 'parenthetical' && t !== 'dialogue') break
-        if (elements[i].text.trim()) indexes.push(i)
+        if (prints(elements[i])) indexes.push(i)
         i++
       }
-      blocks.push(dialogueBlock(elements, indexes))
+      const first = elements[indexes[0]]
+      let suffix = ''
+      if (first.type === 'character') {
+        const cue = printable(first).text
+        const name = characterName(cue)
+        if (options.autoContd && name && name === lastSpeaker && !/\(CONT'D\)/i.test(cue)) {
+          suffix = " (CONT'D)"
+          autoContd.push(indexes[0])
+        }
+        lastSpeaker = name
+      }
+      const prev = blocks[blocks.length - 1]
+      if (first.type === 'character' && first.dual && prev?.speech) {
+        blocks[blocks.length - 1] = dualBlock(elements, prev.speech.indexes, prev.speech.suffix, indexes, suffix)
+        lastSpeaker = null
+      } else blocks.push(dialogueBlock(elements, indexes, suffix))
     } else {
-      blocks.push(simpleBlock(el, i++))
+      if (el.type === 'scene') {
+        sceneCount++
+        lastSpeaker = null
+      }
+      blocks.push(simpleBlock(el, i, el.type === 'scene' ? (sceneNumberOf(el) ?? String(sceneCount)) : undefined))
+      i++
     }
   }
 
@@ -125,7 +239,7 @@ function buildBlocks(elements: ScriptElement[]): Block[] {
   const merged: Block[] = []
   for (const block of blocks) {
     const prev = merged[merged.length - 1]
-    if (prev?.keepWithNext) {
+    if (prev?.keepWithNext && block.pageBreak === undefined) {
       const offset = prev.rows.length
       merged[merged.length - 1] = {
         rows: [...prev.rows, ...block.rows],
@@ -149,10 +263,19 @@ function leadingBlanks(rows: Row[]): number {
   return n
 }
 
-export function paginate(elements: ScriptElement[], linesPerPage = PAGE.linesPerPage): Pagination {
+export function paginate(elements: ScriptElement[], options: PaginateOptions = {}): Pagination {
+  const linesPerPage = options.linesPerPage ?? PAGE.linesPerPage
+  const autoContd: number[] = []
   const pages: Row[][] = [[]]
+  /** Pages started by a forced break begin right after it (even before non-printing elements). */
+  const forcedStarts = new Map<number, number>()
 
-  for (const block of buildBlocks(elements)) {
+  for (const block of buildBlocks(elements, options, autoContd)) {
+    if (block.pageBreak !== undefined) {
+      if (pages[pages.length - 1].length) pages.push([])
+      if (pages.length > 1) forcedStarts.set(pages.length, block.pageBreak + 1)
+      continue
+    }
     let rows = block.rows
     let breaks = block.breaks
     for (;;) {
@@ -195,13 +318,16 @@ export function paginate(elements: ScriptElement[], linesPerPage = PAGE.linesPer
     }
   }
 
+  if (pages.length > 1 && pages[pages.length - 1].length === 0) pages.pop()
   const result: Pagination = {
     pages: pages.map((rows, i) => ({ number: i + 1, rows })),
     pageStarts: [],
+    autoContd,
   }
   for (const page of result.pages.slice(1)) {
     const first = page.rows.find((r) => r.kind !== 'blank')
-    if (first) result.pageStarts.push({ page: page.number, el: first.el })
+    const el = forcedStarts.get(page.number) ?? first?.el
+    if (el !== undefined && el < elements.length) result.pageStarts.push({ page: page.number, el })
   }
   return result
 }

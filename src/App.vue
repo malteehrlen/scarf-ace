@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import ScriptEditor, { type EditorStatus } from './components/ScriptEditor.vue'
 import TitlePageDialog from './components/TitlePageDialog.vue'
 import LibraryDialog from './components/LibraryDialog.vue'
@@ -9,21 +9,46 @@ import MenuButton from './components/MenuButton.vue'
 import SettingsMenu from './components/SettingsMenu.vue'
 import HelpDialog from './components/HelpDialog.vue'
 import AboutDialog from './components/AboutDialog.vue'
+import PdfDialog from './components/PdfDialog.vue'
+import ReportDialog from './components/ReportDialog.vue'
+import FdxDialog from './components/FdxDialog.vue'
+import {
+  defaultImportOptions,
+  fdxImportIssues,
+  fromFdx,
+  looksLikeFdx,
+  parseFdx,
+  toFdx,
+  type FdxExportOptions,
+  type FdxImportOptions,
+  type ParsedFdx,
+} from './lib/fdx'
+import FindBar from './components/FindBar.vue'
 import AppTooltip from './components/AppTooltip.vue'
 import SidebarResizer from './components/SidebarResizer.vue'
 import { APP_NAME } from './lib/about'
 import {
   ELEMENT_LABELS,
-  ELEMENT_TYPES,
+  PRIMARY_TYPES,
   NEXT_ON_ENTER,
   NEXT_ON_TAB,
   newScript,
   scriptFileName,
   type ElementType,
   type Script,
+  type TitlePage,
   type ScriptElement,
 } from './lib/screenplay'
-import { deleteScript, lastOpenedId, listScripts, loadScript, sampleScript, saveScript } from './lib/storage'
+import {
+  INDEX_KEY,
+  deleteScript,
+  lastOpenedId,
+  listScripts,
+  loadScript,
+  sampleScript,
+  saveScript,
+  scriptKey,
+} from './lib/storage'
 import { fromFountain, toFountain } from './lib/fountain'
 import { paginate } from './lib/paginate'
 import { ZOOM_LEVELS, fitScale, parseZoom, zoomLabel, type Zoom } from './lib/zoom'
@@ -42,11 +67,21 @@ const libraryDialog = ref<InstanceType<typeof LibraryDialog>>()
 const fileInput = ref<HTMLInputElement>()
 const helpDialog = ref<InstanceType<typeof HelpDialog>>()
 const aboutDialog = ref<InstanceType<typeof AboutDialog>>()
+const pdfDialog = ref<InstanceType<typeof PdfDialog>>()
+const reportDialog = ref<InstanceType<typeof ReportDialog>>()
+const fdxDialog = ref<InstanceType<typeof FdxDialog>>()
 
-const saveState = ref<'saved' | 'pending' | 'error'>('saved')
+const saveState = ref<'saved' | 'pending' | 'paused' | 'error'>('saved')
+// Two tabs with the same script would overwrite each other's work. The browser tells each tab when
+// another one writes to localStorage; if that's our script, pause saving and let the writer choose.
+// (Declared before the first save, which happens while the initial script is created.)
+const conflict = ref<null | 'changed' | 'deleted'>(null)
+let lastWritten = ''
+let currentId = ''
 const busy = ref(false)
 const scripts = ref(listScripts())
 const script = ref<Script>(initialScript())
+currentId = script.value.id
 const status = ref<EditorStatus>({
   type: 'scene',
   index: 0,
@@ -54,6 +89,7 @@ const status = ref<EditorStatus>({
   pageCount: 1,
   pageStarts: [],
   vim: { enabled: false, mode: 'normal', pending: '', message: '' },
+  find: { count: 0, current: -1 },
 })
 /** False between switching scripts and the new editor reporting its page count. */
 const statusReady = ref(false)
@@ -164,6 +200,30 @@ function writeFlag(key: string, on: boolean) {
   }
 }
 
+// Find & replace bar: Ctrl/⌘+F finds, Ctrl+H (⌘⌥F) replaces.
+const findBar = ref<InstanceType<typeof FindBar>>()
+const findOpen = ref(false)
+const findReplace = ref(false)
+const findInitial = ref('')
+async function openFind(replace: boolean) {
+  const selected = editor.value?.selectedText() ?? ''
+  if (findOpen.value) {
+    findBar.value?.focus(replace, selected || undefined)
+    return
+  }
+  findInitial.value = selected
+  findReplace.value = replace
+  findOpen.value = true
+  await nextTick()
+  findBar.value?.focus(replace)
+}
+function closeFindBar() {
+  findOpen.value = false
+  editor.value?.find.close()
+}
+const findShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘F' : 'Ctrl+F'
+const replaceShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⌥F' : 'Ctrl+H'
+
 // Focus mode: only the page. Esc leaves it (a quick double Esc with Vim on, whose Esc is busy).
 const focusMode = ref(false)
 const focusHint = ref(false)
@@ -258,8 +318,11 @@ function initialScript(): Script {
 }
 
 function persist(s: Script) {
+  // While another tab's changes are unresolved, don't overwrite them.
+  if (conflict.value && s.id === currentId) return
   try {
-    saveScript(s)
+    const json = saveScript(s)
+    if (s.id === currentId || !currentId) lastWritten = json
     saveState.value = 'saved'
   } catch (e) {
     console.error(e)
@@ -269,7 +332,46 @@ function persist(s: Script) {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Remounts the editor when the script is replaced by another tab's version. */
+const editorRevision = ref(0)
+/** A saved script without its save time, so re-saving identical content isn't mistaken for a change. */
+function contentOf(json: string | null) {
+  if (!json) return null
+  try {
+    return JSON.stringify({ ...JSON.parse(json), updatedAt: 0 })
+  } catch {
+    return json
+  }
+}
+function onStorage(e: StorageEvent) {
+  if (e.key === INDEX_KEY) scripts.value = listScripts()
+  if (e.key !== scriptKey(script.value.id)) return
+  if (e.newValue && contentOf(e.newValue) === contentOf(lastWritten)) {
+    lastWritten = e.newValue
+    return
+  }
+  clearTimeout(saveTimer)
+  conflict.value = e.newValue === null ? 'deleted' : 'changed'
+  saveState.value = 'paused'
+}
+window.addEventListener('storage', onStorage)
+onBeforeUnmount(() => window.removeEventListener('storage', onStorage))
+function resolveConflict(keep: 'mine' | 'theirs') {
+  const theirs = keep === 'theirs' ? loadScript(script.value.id) : null
+  conflict.value = null
+  if (theirs) {
+    script.value = theirs
+    lastWritten = JSON.stringify(theirs)
+    editorRevision.value++
+    saveState.value = 'saved'
+  } else persist(script.value)
+}
 function scheduleSave() {
+  if (conflict.value) {
+    saveState.value = 'paused'
+    return
+  }
   saveState.value = 'pending'
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => persist(script.value), 400)
@@ -283,6 +385,25 @@ function flushSave() {
 window.addEventListener('beforeunload', flushSave)
 
 watch(() => script.value.titlePage, scheduleSave, { deep: true })
+watch(() => script.value.pdf, scheduleSave, { deep: true })
+
+// The scene tree follows the script, but rebuilding it on every keystroke is costly on a long
+// script. Typing inside a line updates it after a short pause; adding or removing lines, at once.
+const treeElements = shallowRef<ScriptElement[]>(script.value.elements)
+let treeTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => script.value.elements,
+  (elements) => {
+    clearTimeout(treeTimer)
+    if (elements.length !== treeElements.value.length) treeElements.value = elements
+    else treeTimer = setTimeout(() => (treeElements.value = script.value.elements), 250)
+  },
+)
+// A different script (opened, or reloaded from another tab) shows in the tree at once.
+watch([() => script.value.id, editorRevision], () => {
+  clearTimeout(treeTimer)
+  treeElements.value = script.value.elements
+})
 
 function onChange(elements: ScriptElement[]) {
   script.value.elements = elements
@@ -299,6 +420,8 @@ function onStatus(next: EditorStatus) {
 function open(s: Script) {
   flushSave()
   script.value = s
+  currentId = s.id
+  conflict.value = null
   statusReady.value = false
   snooze.value = null
   lastEdit = null
@@ -321,6 +444,7 @@ function removeScript(id: string) {
   if (id === script.value.id) {
     const next = scripts.value[0] && loadScript(scripts.value[0].id)
     script.value = next || newScript()
+    currentId = script.value.id
     persist(script.value)
   }
 }
@@ -330,12 +454,35 @@ async function importFile(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  const { elements, titlePage } = fromFountain(await file.text())
-  if (!titlePage.title) titlePage.title = file.name.replace(/\.[^.]+$/, '')
+  const text = await file.text()
+  if (!looksLikeFdx(file.name, text)) return openImported(fromFountain(text), file.name)
+  // Final Draft: ask about anything that doesn't map one-to-one before importing.
+  try {
+    const parsed = parseFdx(text)
+    pendingFdx = { parsed, name: file.name }
+    if (!fdxDialog.value?.openImport(parsed, file.name)) importFdx(defaultImportOptions(fdxImportIssues(parsed)))
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
+
+let pendingFdx: { parsed: ParsedFdx; name: string } | null = null
+function importFdx(options: FdxImportOptions) {
+  if (!pendingFdx) return
+  openImported(fromFdx(pendingFdx.parsed, options), pendingFdx.name)
+  pendingFdx = null
+}
+
+function openImported({ elements, titlePage }: { elements: ScriptElement[]; titlePage: TitlePage }, fileName: string) {
+  if (!titlePage.title) titlePage.title = fileName.replace(/\.[^.]+$/, '')
   const imported = newScript(elements, titlePage)
   // The writer already has this file, so it counts as a backup.
   imported.backup = markBackedUp(paginate(elements).pages.length)
   open(imported)
+}
+
+function exportFdx(options: FdxExportOptions) {
+  download(`${scriptFileName(script.value)}.fdx`, toFdx(script.value.elements, script.value.titlePage, options), 'application/xml')
 }
 
 function download(name: string, content: string, type: string) {
@@ -352,6 +499,10 @@ function exportFountain() {
   clearTimeout(saveTimer)
   persist(script.value)
 }
+
+const AUTO_CONTD_KEY = 'scarfAce:autoContd'
+const autoContd = ref(readFlag(AUTO_CONTD_KEY, true))
+watch(autoContd, (on) => writeFlag(AUTO_CONTD_KEY, on))
 
 const REMINDERS_KEY = 'scarfAce:reminders'
 const remindersEnabled = ref(readFlag(REMINDERS_KEY, true))
@@ -382,6 +533,22 @@ const backupLabel = computed(() => {
 
 // Writers press Ctrl/Cmd+S out of habit; make it do the one save that leaves the browser.
 function onKeydown(e: KeyboardEvent) {
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 'f') {
+    e.preventDefault()
+    openFind(e.altKey) // ⌘⌥F: replace (Mac convention)
+    return
+  }
+  // Esc closes the find bar from anywhere (e.g. after a button it held focus on became disabled).
+  if (e.key === 'Escape' && findOpen.value && !(e.target as Element | null)?.closest?.('dialog, .ProseMirror')) {
+    closeFindBar()
+    return
+  }
+  if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'h') {
+    e.preventDefault()
+    openFind(true)
+    return
+  }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
     e.preventDefault()
     setFocusMode(!focusMode.value)
@@ -417,7 +584,7 @@ async function exportAsPdf() {
   busy.value = true
   try {
     const { exportPdf } = await import('./lib/pdf')
-    await exportPdf(script.value)
+    await exportPdf(script.value, { autoContd: autoContd.value, sceneNumbers: script.value.pdf.sceneNumbers })
   } catch (e) {
     console.error(e)
     alert(`PDF export failed: ${e instanceof Error ? e.message : e}`)
@@ -432,7 +599,12 @@ const typeModel = computed({
 })
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
-const typeShortcuts = `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}1–${ELEMENT_TYPES.length}`
+const typeShortcuts = `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}1–${PRIMARY_TYPES.length}`
+const TYPE_GROUPS: { label: string; types: ElementType[] }[] = [
+  { label: 'Screenplay', types: PRIMARY_TYPES },
+  { label: 'Special', types: ['centered', 'pagebreak'] },
+  { label: 'Outline (not printed)', types: ['section', 'synopsis'] },
+]
 const saveShortcut = isMac ? '⌘S' : 'Ctrl+S'
 const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
 </script>
@@ -449,23 +621,29 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
         <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Switch to another script saved in this browser" data-tip-side="right" @click="libraryDialog?.open()">
           <span class="menu-label">Open…</span>
         </button>
-        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Open a .fountain file: a backup, or a script from another app" data-tip-side="right" @click="fileInput?.click()">
-          <span class="menu-label">Import Fountain…</span>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Open a Fountain (.fountain) or Final Draft (.fdx) file: a backup, or a script from another app" data-tip-side="right" @click="fileInput?.click()">
+          <span class="menu-label">Import…</span>
         </button>
         <div class="menu-separator" role="separator" />
         <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Title, author, contact details and draft date" data-tip-side="right" @click="titleDialog?.open()">
           <span class="menu-label">Title page…</span>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Page count, runtime, scene lengths and who speaks how much" data-tip-side="right" @click="reportDialog?.open()">
+          <span class="menu-label">Script report…</span>
         </button>
         <div class="menu-separator" role="separator" />
         <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Save a copy of this script as a Fountain file" data-tip-side="right" @click="exportFountain">
           <span class="menu-label">Download backup (.fountain)</span>
           <kbd class="menu-note">{{ saveShortcut }}</kbd>
         </button>
-        <button class="menu-item" role="menuitem" tabindex="-1" :disabled="busy" data-tip="Print-ready, industry-standard PDF" data-tip-side="right" @click="exportAsPdf">
-          <span class="menu-label">Export PDF</span>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Save a copy for Final Draft and apps that read .fdx (asks about anything that doesn't carry over)" data-tip-side="right" @click="fdxDialog?.openExport(script.elements)">
+          <span class="menu-label">Export Final Draft (.fdx)…</span>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" :disabled="busy" data-tip="Options like scene numbers, then download the PDF" data-tip-side="right" @click="pdfDialog?.open()">
+          <span class="menu-label">Export PDF…</span>
         </button>
       </MenuButton>
-      <input ref="fileInput" type="file" accept=".fountain,.spmd,.txt,text/plain" hidden @change="importFile" />
+      <input ref="fileInput" type="file" accept=".fountain,.spmd,.txt,.fdx,text/plain" hidden @change="importFile" />
       <span class="sep" />
       <button class="doc-title" data-tip="Edit the title page" @click="titleDialog?.open()">
         <span class="doc-title-text">{{ script.titlePage.title || 'Untitled' }}</span>
@@ -473,9 +651,23 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
       </button>
       <span class="sep" />
       <select v-model="typeModel" class="type-select" :data-tip="'Element type of the current line'" :data-tip-kbd="`Tab · ${typeShortcuts}`" aria-label="Element type">
-        <option v-for="t in ELEMENT_TYPES" :key="t" :value="t">{{ ELEMENT_LABELS[t] }}</option>
+        <optgroup v-for="group in TYPE_GROUPS" :key="group.label" :label="group.label">
+          <option v-for="t in group.types" :key="t" :value="t">{{ ELEMENT_LABELS[t] }}</option>
+        </optgroup>
       </select>
       <span class="spacer" />
+      <button
+        class="focus-enter"
+        aria-label="Find and replace"
+        data-tip="Find and replace"
+        :data-tip-kbd="`${findShortcut} · ${replaceShortcut}`"
+        @click="openFind(false)"
+      >
+        <svg class="panel-icon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M20 20l-4.2-4.2" />
+        </svg>
+      </button>
       <button
         class="focus-enter"
         aria-label="Focus mode"
@@ -487,7 +679,7 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
           <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" />
         </svg>
       </button>
-      <SettingsMenu v-model:theme="theme" v-model:vim="vimEnabled" v-model:reminders="remindersEnabled" />
+      <SettingsMenu v-model:theme="theme" v-model:vim="vimEnabled" v-model:reminders="remindersEnabled" v-model:auto-contd="autoContd" />
       <MenuButton label="Help" tip="Help and about" align="right" trigger-class="icon-trigger">
         <template #trigger>
           <svg class="menu-icon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
@@ -503,7 +695,9 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
           <span class="menu-label">About {{ APP_NAME }}</span>
         </button>
       </MenuButton>
-      <button class="primary" :disabled="busy" data-tip="Download a print-ready PDF" @click="exportAsPdf">{{ busy ? 'Exporting…' : 'Export PDF' }}</button>
+      <button class="primary" :disabled="busy" data-tip="Choose options like scene numbers, then download the PDF" @click="pdfDialog?.open()">
+        {{ busy ? 'Exporting…' : 'Export PDF' }}
+      </button>
     </header>
 
     <main
@@ -544,7 +738,7 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
         <aside v-show="sidebarVisible" id="scene-sidebar" class="sidebar" aria-label="Scenes">
           <SceneTree
             ref="sceneTree"
-            :elements="script.elements"
+            :elements="treeElements"
             :hide-shortcut="sidebarShortcut"
             @hide="toggleSidebar(true)"
             :active="status.index"
@@ -553,14 +747,48 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
           />
         </aside>
       </Transition>
+      <div v-if="conflict" class="conflict-banner" role="alert">
+        <svg class="panel-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 3 2 20h20L12 3Z" />
+          <path d="M12 10v4M12 17h.01" />
+        </svg>
+        <span v-if="conflict === 'changed'">
+          <strong>This script was changed in another tab.</strong> Saving is paused here so neither version is lost.
+        </span>
+        <span v-else><strong>This script was deleted in another tab.</strong> Saving is paused here.</span>
+        <button
+          v-if="conflict === 'changed'"
+          data-tip="Replace what's here with the other tab's version"
+          @click="resolveConflict('theirs')"
+        >
+          Load that version
+        </button>
+        <button class="primary" data-tip="Keep this tab's version and save it (overwrites the other tab's)" @click="resolveConflict('mine')">
+          Keep mine
+        </button>
+      </div>
+      <FindBar
+        v-if="findOpen"
+        ref="findBar"
+        :count="status.find.count"
+        :current="status.find.current"
+        :replace-mode="findReplace"
+        :initial="findInitial"
+        @search="editor?.find.search($event)"
+        @step="editor?.find.step($event)"
+        @replace="editor?.find.replace($event)"
+        @replace-all="editor?.find.replaceAll($event)"
+        @close="closeFindBar"
+      />
       <section ref="desk" class="desk" :class="{ fit: zoom === 'fit' }" :style="reminder ? { paddingBottom: `${REMINDER_INSET}px` } : undefined">
         <ScriptEditor
           ref="editor"
-          :key="script.id"
+          :key="`${script.id}:${editorRevision}`"
           :elements="script.elements"
           :vim="vimEnabled"
           :bottom-inset="reminder ? REMINDER_INSET : 0"
           :zoom="effectiveZoom"
+          :auto-contd="autoContd"
           @change="onChange"
           @write="exportFountain"
           @status="onStatus"
@@ -620,12 +848,34 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
         {{ backupLabel }}
       </button>
       <span :class="['save', saveState]" tabindex="0" data-tip="Every change is saved automatically in this browser">{{
-        saveState === 'saved' ? 'Saved locally' : saveState === 'pending' ? 'Saving…' : 'Save failed — storage full?'
+        saveState === 'saved'
+          ? 'Saved locally'
+          : saveState === 'pending'
+            ? 'Saving…'
+            : saveState === 'paused'
+              ? 'Not saving: changed in another tab'
+              : 'Save failed — storage full?'
       }}</span>
     </footer>
 
     <HelpDialog ref="helpDialog" />
     <AboutDialog ref="aboutDialog" />
+    <FdxDialog ref="fdxDialog" @export="exportFdx" @import="importFdx" />
+    <ReportDialog
+      ref="reportDialog"
+      :elements="script.elements"
+      :auto-contd="autoContd"
+      :title="script.titlePage.title"
+      @select="editor?.scrollToElement($event)"
+    />
+    <PdfDialog
+      ref="pdfDialog"
+      v-model="script.pdf"
+      v-model:auto-contd="autoContd"
+      :busy="busy"
+      :has-title-page="Boolean(script.titlePage.title.trim())"
+      @export="exportAsPdf"
+    />
     <AppTooltip />
     <template v-if="focusMode">
       <Transition name="fade">

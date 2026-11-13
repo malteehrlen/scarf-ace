@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf'
-import { paginate } from './paginate'
+import { paginate, type Row } from './paginate'
 import { PAGE, scriptFileName, type Script, type TitlePage } from './screenplay'
 
 const FONT = 'CourierPrime'
@@ -34,6 +34,8 @@ async function registerFonts(doc: jsPDF) {
   const styles: [string, string][] = [
     ['CourierPrime-Regular.ttf', 'normal'],
     ['CourierPrime-Bold.ttf', 'bold'],
+    ['CourierPrime-Italic.ttf', 'italic'],
+    ['CourierPrime-BoldItalic.ttf', 'bolditalic'],
   ]
   for (const [file, style] of styles) {
     doc.addFileToVFS(file, await loadFont(file))
@@ -63,7 +65,33 @@ function drawTitlePage(doc: jsPDF, tp: TitlePage) {
   }
 }
 
-export async function buildPdf(script: Script): Promise<jsPDF> {
+export interface PdfOptions {
+  /** Add (CONT'D) when a character speaks again after action in the same scene. */
+  autoContd: boolean
+  /** Print scene numbers in both margins (for shooting scripts; spec scripts leave them off). */
+  sceneNumbers: boolean
+}
+
+const UNDERLINE_OFFSET_IN = 0.025
+
+/** Draws one line, with its bold/italic/underlined pieces in the matching Courier Prime style. */
+function drawRow(doc: jsPDF, row: Row, y: number) {
+  let x = PAGE.leftIn + row.indent * PAGE.charIn
+  for (const run of row.runs ?? [{ text: row.text, bold: false, italic: false, underline: false }]) {
+    if (!run.text) continue
+    doc.setFont(FONT, run.bold && run.italic ? 'bolditalic' : run.bold ? 'bold' : run.italic ? 'italic' : 'normal')
+    doc.text(run.text, x, y)
+    const width = run.text.length * PAGE.charIn
+    if (run.underline) {
+      doc.setLineWidth(0.01)
+      doc.line(x, y + UNDERLINE_OFFSET_IN, x + width, y + UNDERLINE_OFFSET_IN)
+    }
+    x += width
+  }
+  doc.setFont(FONT, 'normal')
+}
+
+export async function buildPdf(script: Script, options: PdfOptions): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'in', format: 'letter', orientation: 'portrait' })
   await registerFonts(doc)
   doc.setFont(FONT, 'normal')
@@ -73,20 +101,26 @@ export async function buildPdf(script: Script): Promise<jsPDF> {
   const hasTitlePage = Boolean(script.titlePage.title.trim())
   if (hasTitlePage) drawTitlePage(doc, script.titlePage)
 
-  const { pages } = paginate(script.elements)
+  const { pages } = paginate(script.elements, { autoContd: options.autoContd })
   pages.forEach((page, i) => {
     if (hasTitlePage || i > 0) doc.addPage('letter', 'portrait')
     if (page.number > 1) {
       doc.text(`${page.number}.`, PAGE.widthIn - 1, 0.5 + BASELINE_IN, { align: 'right' })
     }
     page.rows.forEach((row, line) => {
-      if (row.text) doc.text(row.text, PAGE.leftIn + row.indent * PAGE.charIn, lineY(line))
+      const y = lineY(line)
+      if (row.text) drawRow(doc, row, y)
+      if (row.right?.text) drawRow(doc, row.right, y)
+      if (options.sceneNumbers && row.sceneNumber) {
+        doc.text(row.sceneNumber, PAGE.leftIn - 0.3, y, { align: 'right' })
+        doc.text(row.sceneNumber, PAGE.leftIn + PAGE.textWidth * PAGE.charIn + 0.3, y)
+      }
     })
   })
   return doc
 }
 
-export async function exportPdf(script: Script) {
-  const doc = await buildPdf(script)
+export async function exportPdf(script: Script, options: PdfOptions) {
+  const doc = await buildPdf(script, options)
   doc.save(`${scriptFileName(script)}.pdf`)
 }

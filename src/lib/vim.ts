@@ -156,16 +156,19 @@ function wordBack(L: Lines, o: number, big: boolean) {
 // --- Search --------------------------------------------------------------------------------
 
 /**
- * Compiles a search pattern. Smartcase: case-insensitive unless the pattern has a capital.
- * Patterns are JS regexes with Vim's \< \> word boundaries; invalid ones match literally.
+ * Compiles a search pattern. Smartcase: case-insensitive unless the pattern has a capital; Vim's \c
+ * anywhere in the pattern forces ignoring case and \C forces matching it. Patterns are JS regexes
+ * with Vim's \< \> word boundaries; invalid ones match literally.
  */
 export function compileSearch(pattern: string): RegExp | null {
-  if (!pattern) return null
-  const flags = /[A-Z]/.test(pattern.replace(/\\./g, '')) ? 'g' : 'gi'
+  const force = /\\c/.test(pattern) ? 'gi' : /\\C/.test(pattern) ? 'g' : null
+  const body = pattern.replace(/\\[cC]/g, '')
+  if (!body) return null
+  const flags = force ?? (/[A-Z]/.test(body.replace(/\\./g, '')) ? 'g' : 'gi')
   try {
-    return new RegExp(pattern.replace(/\\[<>]/g, '\\b'), flags)
+    return new RegExp(body.replace(/\\[<>]/g, '\\b'), flags)
   } catch {
-    return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
+    return new RegExp(body.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
   }
 }
 
@@ -299,7 +302,8 @@ export function tokenOf(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | '
 
 // --- The controller ----------------------------------------------------------------------------
 
-type Register = { linewise: false; text: string } | { linewise: true; elements: { type: ElementType; text: string }[] }
+/** Line-wise registers hold whole elements, so formatting and dual dialogue survive yank/paste. */
+type Register = { linewise: false; text: string } | { linewise: true; elements: PMNode[] }
 
 interface MotionResult {
   off: number
@@ -492,7 +496,9 @@ class VimController {
           this.extra.message = 'E348: No string under cursor'
           return null
         }
-        const pattern = `\\<${word.text}\\>`
+        // Like Vim, * and # ignore case (smartcase doesn't apply to them). It matters here: cues are
+        // shown in capitals but stored as typed, so "THEO" on screen may be "Theo" in the text.
+        const pattern = `\\c\\<${word.text}\\>`
         const forward = m[0] === '*'
         this.extra.search = { pattern, forward }
         this.extra.highlight = true
@@ -825,7 +831,7 @@ class VimController {
     const element = state.schema.nodes.element
     this.register = {
       linewise: true,
-      elements: Array.from({ length: lb - la + 1 }, (_, k) => ({ type: L.types[la + k], text: L.lineText(la + k) })),
+      elements: Array.from({ length: lb - la + 1 }, (_, k) => state.doc.child(la + k)),
     }
     if (op === 'y') {
       const off = L.lineAt(cur) === la ? cur : L.offs[la]
@@ -969,9 +975,7 @@ class VimController {
     const line = L.lineAt(cur)
     const tr = closeHistory(state.tr)
     if (reg.linewise) {
-      const element = state.schema.nodes.element
       const nodes = Array.from({ length: count }, () => reg.elements).flat()
-        .map((e) => element.create({ type: e.type }, e.text ? state.schema.text(e.text) : undefined))
       const at = before ? L.starts[line] : L.nodeEnd(line)
       tr.insert(at, nodes)
       const firstText = nodes[0].textContent

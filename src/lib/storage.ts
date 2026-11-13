@@ -1,9 +1,9 @@
 import { emptyBackup } from './backup'
 import { emptyTitlePage, newScript, type Script } from './screenplay'
 
-const INDEX_KEY = 'scarfAce:index'
+export const INDEX_KEY = 'scarfAce:index'
 const LAST_KEY = 'scarfAce:last'
-const scriptKey = (id: string) => `scarfAce:script:${id}`
+export const scriptKey = (id: string) => `scarfAce:script:${id}`
 
 export interface ScriptSummary {
   id: string
@@ -27,17 +27,24 @@ export function listScripts(): ScriptSummary[] {
 export function loadScript(id: string): Script | null {
   const script = readJson<Script | null>(scriptKey(id), null)
   if (!script) return null
-  return { ...script, titlePage: { ...emptyTitlePage(), ...script.titlePage }, backup: script.backup ?? emptyBackup() }
+  return {
+    ...script,
+    titlePage: { ...emptyTitlePage(), ...script.titlePage },
+    backup: script.backup ?? emptyBackup(),
+    pdf: { sceneNumbers: script.pdf?.sceneNumbers ?? false },
+  }
 }
 
-/** Throws if storage is full or unavailable so the caller can surface it. */
-export function saveScript(script: Script) {
+/** Throws if storage is full or unavailable so the caller can surface it. Returns what was stored. */
+export function saveScript(script: Script): string {
   script.updatedAt = Date.now()
-  localStorage.setItem(scriptKey(script.id), JSON.stringify(script))
+  const json = JSON.stringify(script)
+  localStorage.setItem(scriptKey(script.id), json)
   const index = listScripts().filter((s) => s.id !== script.id)
   index.push({ id: script.id, title: script.titlePage.title || 'Untitled', updatedAt: script.updatedAt })
   localStorage.setItem(INDEX_KEY, JSON.stringify(index))
   localStorage.setItem(LAST_KEY, script.id)
+  return json
 }
 
 export function deleteScript(id: string) {

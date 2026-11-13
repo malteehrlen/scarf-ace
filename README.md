@@ -8,10 +8,26 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 - **Real pagination.** 54 lines per page in 12pt Courier, with scene headings never orphaned, action
   split only with ≥2 lines per page, and dialogue split with `(MORE)` / `(CONT'D)`. Page breaks are
   shown live in the editor and match the PDF.
-- **PDF export** with an optional title page, using the embedded Courier Prime font.
-- **Fountain import/export** for interoperability with Trelby, Highland, Fade In, etc. Copy/paste
-  also speaks Fountain.
-- **Autosave** to localStorage, with multiple scripts.
+- **PDF export** with an optional title page, using the embedded Courier Prime font. Exporting
+  first shows options: scene numbers (for shooting scripts) and automatic (CONT'D).
+- **Fountain import/export** for interoperability with Trelby, Highland, Fade In, etc., without losing
+  anything: notes `[[…]]` (boneyard `/* */` becomes notes), sections `#`, synopses `=`, forced page
+  breaks `===`, centered text `> <`, dual dialogue `^` and scene numbers `#12A#` all round-trip.
+  Copy/paste also speaks Fountain.
+- **Final Draft (.fdx) import and export.** Anything that doesn't map one-to-one (sections, synopses,
+  notes, act breaks, General paragraphs, scene numbers, the free-form title page) is listed in a
+  dialog where you choose what happens to it; defaults keep content.
+- **Bold, italic, underline** (Ctrl/⌘+B / I / U), stored as Fountain emphasis and printed in the PDF.
+- **Autocomplete** for character names and extensions, scene headings (INT./EXT., known locations,
+  times of day) and transitions.
+- **Dual dialogue** side by side, on screen and in the PDF.
+- **Automatic (CONT'D)** when a character speaks again after action in the same scene (setting).
+- **Find & replace** (Ctrl/⌘+F, Ctrl+H / ⌘⌥F) that keeps capitalization: renaming Maya → Mia also
+  turns the cue `MAYA` into `MIA`. Replace all is one undo.
+- **Script report:** pages, estimated runtime, scene lengths in eighths of a page, and per-character
+  speeches, words and scenes.
+- **Autosave** to localStorage, with multiple scripts. If the same script is open in two tabs, the
+  other tab pauses saving and asks which version to keep instead of silently overwriting.
 - **Dark mode.** Follows the system setting by default; pick System / Light / Dark in the ⚙ settings
   menu, and the choice is remembered.
 - **Flexible scene sidebar.** Drag its edge to resize (double-click to reset), hide it with the button in
@@ -32,12 +48,16 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 | Tab | Action ⇄ Character, Dialogue ⇄ Parenthetical |
 | Shift+Tab | Cycle element type backwards |
 | Ctrl+Alt+1…7 (⌘⌥ on Mac) | Scene, Action, Character, Parenthetical, Dialogue, Transition, Shot |
+| Ctrl+B / I / U (⌘ on Mac) | Bold / italic / underline |
+| Ctrl+F / ⌘F, Ctrl+H / ⌘⌥F | Find, find & replace |
 | Ctrl+S / ⌘S | Download a Fountain backup |
 | Ctrl+\\ / ⌘\\ | Show or hide the scenes sidebar |
 | Ctrl+Shift+F / ⌘⇧F | Focus mode (Esc to leave; double Esc with Vim on) |
 | `(` in empty dialogue | Starts a parenthetical; `)` at its end returns to dialogue |
 
 Typing `INT.` / `EXT.` in an action line makes it a scene heading; `CUT TO:` makes a transition.
+Fountain shortcuts work too: `===` (page break), `# ` (section), `= ` (synopsis), `> text <`
+(centered), and `^` after a character name (dual dialogue).
 
 ## Vim mode
 
@@ -52,7 +72,8 @@ Optional; turn on **Vim keybindings** in the ⚙ settings menu (remembered per b
 - `x X s S D C Y p P J r ~ u Ctrl-r . o O i a I A`, `Ctrl-d Ctrl-u zz`
 - `o` opens the next element in screenplay order (on a character name it opens dialogue)
 - Search: `/` `?` with incremental highlighting, `n N * #`, `:noh`. Smartcase (case-insensitive
-  unless the pattern has a capital); patterns are JS regexes, with `\<` `\>` as word boundaries
+  unless the pattern has a capital; `\c` / `\C` force it either way, and `*` `#` always ignore case);
+  patterns are JS regexes, with `\<` `\>` as word boundaries
 - `:w` downloads a Fountain backup
 - Tab and Ctrl+Alt+1…7 still change the element type in any mode
 

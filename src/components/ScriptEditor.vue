@@ -2,9 +2,10 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorView } from 'prosemirror-view'
 import { TextSelection } from 'prosemirror-state'
-import { createState, currentType, elementsFromDoc, flashElement, layoutKey, setType } from '../lib/editor'
+import { createState, currentType, elementsFromDoc, flashElement, layoutKey, setLayoutOptions, setType } from '../lib/editor'
 import type { ElementType, ScriptElement } from '../lib/screenplay'
 import { setVimEnabled, vimKey, type VimMode } from '../lib/vim'
+import { closeFind, findStatus, findStep, replaceAll, replaceCurrent, setFind, type FindOptions } from '../lib/find'
 
 export interface EditorStatus {
   type: ElementType
@@ -14,6 +15,7 @@ export interface EditorStatus {
   pageCount: number
   pageStarts: { page: number; el: number }[]
   vim: { enabled: boolean; mode: VimMode; pending: string; message: string }
+  find: { count: number; current: number }
 }
 
 const props = withDefaults(
@@ -24,8 +26,9 @@ const props = withDefaults(
     bottomInset?: number
     /** Page scale (CSS zoom). Line breaks and pagination don't change, only the size. */
     zoom?: number
+    autoContd?: boolean
   }>(),
-  { bottomInset: 0, zoom: 1 },
+  { bottomInset: 0, zoom: 1, autoContd: true },
 )
 const emit = defineEmits<{
   change: [elements: ScriptElement[]]
@@ -50,12 +53,13 @@ function status(): EditorStatus {
     pageCount: layout.pageCount,
     pageStarts: layout.pageStarts,
     vim: { enabled: vim.enabled, mode: vim.mode, pending: vim.pending.join(''), message: vim.message },
+    find: findStatus(state),
   }
 }
 
 onMounted(() => {
   view = new EditorView(mount.value!, {
-    state: createState(props.elements, { vim: props.vim, onWrite: () => emit('write') }),
+    state: createState(props.elements, { vim: props.vim, autoContd: props.autoContd, onWrite: () => emit('write') }),
     attributes: { class: 'script', spellcheck: 'true' },
     ...scrollProps(props.bottomInset),
     dispatchTransaction(tr) {
@@ -95,6 +99,11 @@ watch(
   },
 )
 
+watch(
+  () => props.autoContd,
+  (autoContd) => view && setLayoutOptions(view, { autoContd }),
+)
+
 // A zoom change keeps the cursor's line at the same height on screen instead of jumping away.
 watch(
   () => props.zoom,
@@ -129,6 +138,24 @@ defineExpose({
     if (dom instanceof HTMLElement) dom.scrollIntoView({ block: 'center', behavior: 'smooth' })
   },
   focus: () => view?.focus(),
+  /** The selected text, if it's on one line (to prefill the find bar). */
+  selectedText() {
+    if (!view || view.state.selection.empty) return ''
+    const { from, to } = view.state.selection
+    const text = view.state.doc.textBetween(from, to, '\n')
+    return text.includes('\n') ? '' : text
+  },
+  find: {
+    search: (options: FindOptions) => view && setFind(view, options),
+    step: (dir: 1 | -1) => view && findStep(view, dir),
+    replace: (text: string) => view && replaceCurrent(view, text),
+    replaceAll: (text: string) => (view ? replaceAll(view, text) : 0),
+    close() {
+      if (!view) return
+      closeFind(view)
+      view.focus()
+    },
+  },
 })
 </script>
 

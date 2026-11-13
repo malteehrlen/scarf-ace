@@ -51,9 +51,13 @@ describe('fromFountain', () => {
     ])
   })
 
-  it('strips notes and boneyard', () => {
-    const { elements } = fromFountain('Hello [[a note]] world.\n\n/* gone\n\nINT. X */\nEnd.')
-    expect(elements.map((e) => e.text)).toEqual(['Hello world.', 'End.'])
+  it('keeps notes, and turns boneyard into notes', () => {
+    const { elements } = fromFountain('Hello [[a note\nover two lines]] world.\n\n/* gone\n\nINT. X */\nEnd.')
+    expect(elements.map((e) => [e.type, e.text])).toEqual([
+      ['action', 'Hello [[a note over two lines]] world.'],
+      ['action', '[[gone]]'],
+      ['action', '[[INT. X]] End.'],
+    ])
   })
 })
 
@@ -87,5 +91,56 @@ describe('toFountain', () => {
       { type: 'transition', text: 'CUT TO:' },
       { type: 'transition', text: 'FADE OUT.' },
     ])
+  })
+})
+
+describe('Fountain fidelity', () => {
+  const source = `# Act One
+
+= Maya finds the scarf.
+
+INT. LAUNDROMAT - NIGHT #1A#
+
+Rain. **Hard** rain, *very* _loud_. [[make this shorter]]
+
+MAYA
+Who's there?
+
+THEO ^
+Just me.
+
+> THE END <
+
+===
+
+## Sequence two
+
+EXT. ROAD - DAY
+
+Silence.
+`
+  it('imports every Fountain element', () => {
+    const { elements } = fromFountain(source)
+    expect(elements).toEqual([
+      { type: 'section', text: '# Act One' },
+      { type: 'synopsis', text: 'Maya finds the scarf.' },
+      { type: 'scene', text: 'INT. LAUNDROMAT - NIGHT #1A#' },
+      { type: 'action', text: 'Rain. **Hard** rain, *very* _loud_. [[make this shorter]]' },
+      { type: 'character', text: 'MAYA' },
+      { type: 'dialogue', text: "Who's there?" },
+      { type: 'character', text: 'THEO', dual: true },
+      { type: 'dialogue', text: 'Just me.' },
+      { type: 'centered', text: 'THE END' },
+      { type: 'pagebreak', text: '' },
+      { type: 'section', text: '## Sequence two' },
+      { type: 'scene', text: 'EXT. ROAD - DAY' },
+      { type: 'action', text: 'Silence.' },
+    ])
+  })
+
+  it('round-trips without losing anything', () => {
+    const once = fromFountain(source).elements
+    const twice = fromFountain(toFountain(once)).elements
+    expect(twice).toEqual(once)
   })
 })

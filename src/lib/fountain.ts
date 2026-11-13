@@ -7,6 +7,7 @@ import {
   type ScriptElement,
   type TitlePage,
 } from './screenplay'
+import { stripNotes } from './markup'
 
 const TITLE_KEYS: Record<string, keyof TitlePage> = {
   title: 'title',
@@ -50,7 +51,7 @@ export function toFountain(elements: ScriptElement[], titlePage?: TitlePage): st
   let prev: ScriptElement | undefined
   for (const el of elements) {
     const text = clean(el.text)
-    if (!text) continue
+    if (!text && el.type !== 'pagebreak') continue
     const inDialogue = prev && isDialogueType(prev.type) && (el.type === 'parenthetical' || el.type === 'dialogue')
     if (prev && !inDialogue) out.push('')
 
@@ -60,7 +61,8 @@ export function toFountain(elements: ScriptElement[], titlePage?: TitlePage): st
         break
       case 'character': {
         const name = text.toUpperCase()
-        out.push(/[A-Z]/.test(name.replace(/\(.*\)/, '')) ? name : `@${name}`)
+        const cue = /[A-Z]/.test(name.replace(/\(.*\)/, '')) ? name : `@${name}`
+        out.push(el.dual ? `${cue} ^` : cue)
         break
       }
       case 'parenthetical':
@@ -79,11 +81,22 @@ export function toFountain(elements: ScriptElement[], titlePage?: TitlePage): st
         out.push(`!${text.toUpperCase()}`)
         break
       case 'action': {
-        const ambiguous =
-          SCENE_HEADING_RE.test(text) || isUpper(text) || /^[!@#~=>.]/.test(text) || /^\[\[/.test(text)
+        const ambiguous = SCENE_HEADING_RE.test(text) || isUpper(text) || /^[!@#~=>.]/.test(text)
         out.push(ambiguous ? `!${text}` : text)
         break
       }
+      case 'centered':
+        out.push(`> ${text} <`)
+        break
+      case 'section':
+        out.push(text.startsWith('#') ? text : `# ${text}`)
+        break
+      case 'synopsis':
+        out.push(`= ${text}`)
+        break
+      case 'pagebreak':
+        out.push('===')
+        break
     }
     prev = el
   }
@@ -95,7 +108,17 @@ export function fromFountain(
   options: { titlePage?: boolean } = {},
 ): { elements: ScriptElement[]; titlePage: TitlePage } {
   let text = source.replace(/\r\n?/g, '\n').replace(/^﻿/, '')
-  text = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[\[[\s\S]*?\]\]/g, '')
+  // Boneyard (/* … */) is kept as notes, one per paragraph, so nothing is lost on import.
+  text = text.replace(/\/\*([\s\S]*?)\*\//g, (_m, inner: string) =>
+    inner
+      .split(/\n\s*\n/)
+      .map((p) => p.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .map((p) => `[[${p}]]`)
+      .join('\n\n'),
+  )
+  // Notes may span lines; keep each on one line so paragraphs stay intact.
+  text = text.replace(/\[\[[\s\S]*?\]\]/g, (m) => m.replace(/\s+/g, ' '))
 
   const titlePage = emptyTitlePage()
   let lines = text.split('\n')
@@ -133,24 +156,42 @@ export function fromFountain(
   if (current.length) paragraphs.push(current)
 
   const elements: ScriptElement[] = []
-  const push = (type: ScriptElement['type'], t: string) => {
+  const push = (type: ScriptElement['type'], t: string, extra: Partial<ScriptElement> = {}) => {
     const c = clean(t)
-    if (c) elements.push({ type, text: c })
+    if (c) elements.push({ type, text: c, ...extra })
   }
 
+  // Sections (#), synopses (=) and page breaks (===) are line-level; split paragraphs around them.
+  const blocks: string[][] = []
   for (const para of paragraphs) {
-    let rest = para.map((l) => l.trim())
-    const first = rest[0]
-
-    // Structural markup we don't model: sections, synopses, page breaks.
-    if (/^(#|=)/.test(first)) {
-      rest = rest.filter((l) => !/^(#|=)/.test(l))
-      if (!rest.length) continue
+    let run: string[] = []
+    for (const line of para.map((l) => l.trim())) {
+      if (/^(#|=)/.test(line)) {
+        if (run.length) blocks.push(run)
+        blocks.push([line])
+        run = []
+      } else run.push(line)
     }
+    if (run.length) blocks.push(run)
+  }
 
+  for (let rest of blocks) {
     const head = rest[0]
+    if (/^={3,}$/.test(head)) {
+      elements.push({ type: 'pagebreak', text: '' })
+      continue
+    }
+    if (head.startsWith('#')) {
+      const m = /^(#+)\s*(.*)$/.exec(head)!
+      push('section', `${m[1]} ${m[2]}`)
+      continue
+    }
+    if (head.startsWith('=')) {
+      push('synopsis', head.slice(1))
+      continue
+    }
     if (/^\.[^.]/.test(head) || (SCENE_HEADING_RE.test(head) && !head.startsWith('!'))) {
-      push('scene', head.replace(/^\./, '').replace(/\s*#[^#]*#\s*$/, ''))
+      push('scene', head.replace(/^\./, ''))
       rest = rest.slice(1)
       if (rest.length) push('action', rest.join(' '))
       continue
@@ -160,7 +201,7 @@ export function fromFountain(
       continue
     }
     if (head.startsWith('>') && head.endsWith('<')) {
-      push('action', head.slice(1, -1))
+      push('centered', head.slice(1, -1))
       continue
     }
     if (head.startsWith('>')) {
@@ -172,9 +213,10 @@ export function fromFountain(
       continue
     }
     const name = head.replace(/\s*\^$/, '')
-    const isCharacter = head.startsWith('@') || (rest.length > 1 && isUpper(name.replace(/\(.*?\)/g, '')))
+    // Notes don't count: an all-caps note on its own line is not a character cue.
+    const isCharacter = head.startsWith('@') || (rest.length > 1 && isUpper(stripNotes(name).replace(/\(.*?\)/g, '').trim()))
     if (isCharacter) {
-      push('character', name.replace(/^@/, ''))
+      push('character', name.replace(/^@/, ''), head.endsWith('^') ? { dual: true } : {})
       let dialogue: string[] = []
       const flush = () => {
         if (dialogue.length) push('dialogue', dialogue.join(' '))

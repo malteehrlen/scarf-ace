@@ -4,13 +4,17 @@ import { EditorState, Plugin, PluginKey, TextSelection, type Command } from 'pro
 import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view'
 import { keymap } from 'prosemirror-keymap'
 import { history, redo, undo } from 'prosemirror-history'
-import { baseKeymap } from 'prosemirror-commands'
+import { baseKeymap, toggleMark } from 'prosemirror-commands'
 import { fromFountain, toFountain } from './fountain'
 import { paginate } from './paginate'
+import { NOTE_RE, SCENE_NUMBER_RE, parseRuns, serializeRuns, type Run } from './markup'
 import { vimPlugin } from './vim'
+import { findPlugin } from './find'
+import { completionPlugin } from './completion'
 import {
   ELEMENT_LABELS,
   ELEMENT_TYPES,
+  PRIMARY_TYPES,
   NEXT_ON_ENTER,
   NEXT_ON_TAB,
   SCENE_HEADING_RE,
@@ -27,27 +31,78 @@ export const schema = new Schema({
     doc: { content: 'element+' },
     element: {
       content: 'text*',
-      marks: '',
-      attrs: { type: { default: 'action' } },
-      parseDOM: [{ tag: 'p', getAttrs: (dom) => ({ type: validType((dom as HTMLElement).dataset.type) }) }],
-      toDOM: (node) => ['p', { class: `el el-${node.attrs.type}`, 'data-type': node.attrs.type }, 0],
+      marks: 'strong em underline',
+      attrs: { type: { default: 'action' }, dual: { default: false } },
+      parseDOM: [
+        {
+          tag: 'p',
+          getAttrs: (dom) => ({
+            type: validType((dom as HTMLElement).dataset.type),
+            dual: (dom as HTMLElement).dataset.dual === 'true',
+          }),
+        },
+      ],
+      toDOM: (node) => [
+        'p',
+        { class: `el el-${node.attrs.type}`, 'data-type': node.attrs.type, ...(node.attrs.dual ? { 'data-dual': 'true' } : {}) },
+        0,
+      ],
     },
     text: {},
   },
+  // Fountain emphasis. Stored in element text as markup (**bold**, *italic*, _underline_).
+  marks: {
+    strong: { parseDOM: [{ tag: 'strong' }, { tag: 'b' }], toDOM: () => ['strong', 0] },
+    em: { parseDOM: [{ tag: 'em' }, { tag: 'i' }], toDOM: () => ['em', 0] },
+    underline: { parseDOM: [{ tag: 'u' }], toDOM: () => ['u', 0] },
+  },
 })
 
+/** Text nodes (with emphasis marks) for a line of Fountain markup. */
+function inlineNodes(markup: string): PMNode[] {
+  return parseRuns(markup).map((run) => {
+    const marks = [
+      ...(run.bold ? [schema.marks.strong.create()] : []),
+      ...(run.italic ? [schema.marks.em.create()] : []),
+      ...(run.underline ? [schema.marks.underline.create()] : []),
+    ]
+    return schema.text(run.text, marks)
+  })
+}
+
+/** An element's content as Fountain markup. */
+function markupOf(node: PMNode): string {
+  const runs: Run[] = []
+  node.forEach((child) => {
+    const has = (name: string) => child.marks.some((m) => m.type.name === name)
+    runs.push({ text: child.text ?? '', bold: has('strong'), italic: has('em'), underline: has('underline') })
+  })
+  return serializeRuns(runs)
+}
+
 const elementNode = (el: ScriptElement) =>
-  schema.nodes.element.create({ type: el.type }, el.text ? schema.text(el.text) : undefined)
+  schema.nodes.element.create({ type: el.type, dual: Boolean(el.dual) }, el.text ? inlineNodes(el.text) : undefined)
 
 export function docFromElements(elements: ScriptElement[]): PMNode {
   const els = elements.length ? elements : [{ type: 'action' as const, text: '' }]
   return schema.nodes.doc.create(null, els.map(elementNode))
 }
 
+// ProseMirror keeps unchanged nodes as the same objects between edits, so each element is
+// serialized once and reused until it changes. (Treat the returned elements as read-only.)
+const elementCache = new WeakMap<PMNode, ScriptElement>()
+
 export function elementsFromDoc(doc: PMNode | Fragment): ScriptElement[] {
   const out: ScriptElement[] = []
   doc.forEach((node) => {
-    if (node.type === schema.nodes.element) out.push({ type: node.attrs.type, text: node.textContent })
+    if (node.type !== schema.nodes.element) return
+    let el = elementCache.get(node)
+    if (!el) {
+      el = { type: node.attrs.type, text: markupOf(node) }
+      if (node.attrs.dual) el.dual = true
+      elementCache.set(node, el)
+    }
+    out.push(el)
   })
   return out
 }
@@ -99,8 +154,9 @@ export const enter: Command = (state, dispatch) => {
 export const tab: Command = (state, dispatch) => setType(NEXT_ON_TAB[currentType(state)])(state, dispatch)
 
 export const shiftTab: Command = (state, dispatch) => {
-  const i = ELEMENT_TYPES.indexOf(currentType(state))
-  return setType(ELEMENT_TYPES[(i - 1 + ELEMENT_TYPES.length) % ELEMENT_TYPES.length])(state, dispatch)
+  const i = PRIMARY_TYPES.indexOf(currentType(state))
+  if (i < 0) return setType('action')(state, dispatch)
+  return setType(PRIMARY_TYPES[(i - 1 + PRIMARY_TYPES.length) % PRIMARY_TYPES.length])(state, dispatch)
 }
 
 /** Backspace at the start of an element whose predecessor is empty removes the empty one. */
@@ -131,6 +187,18 @@ const smartTyping = new Plugin({
       const type = node.attrs.type as ElementType
       const atEnd = $from.parentOffset === node.content.size
 
+      // Typing into a page break starts a new action line after it.
+      if (type === 'pagebreak') {
+        const after = $from.after()
+        const tr = state.tr.insert(after, schema.nodes.element.create({ type: 'action' }, schema.text(text)))
+        view.dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1 + text.length)).scrollIntoView())
+        return true
+      }
+      // Fountain's "^" after a character name: dual dialogue (speaks at the same time as the previous speech).
+      if (type === 'character' && text === '^' && atEnd) {
+        view.dispatch(state.tr.setNodeMarkup($from.before(), undefined, { ...node.attrs, dual: !node.attrs.dual }))
+        return true
+      }
       if (text === '(' && node.content.size === 0 && type === 'dialogue') {
         view.dispatch(state.tr.setNodeMarkup($from.before(), undefined, { type: 'parenthetical' }))
         return true
@@ -157,13 +225,36 @@ const smartTyping = new Plugin({
 
     const text = node.textContent
     const becomes = (re: RegExp) => re.test(text) && !re.test(old.textContent)
-    if (becomes(SCENE_HEADING_RE)) return state.tr.setNodeMarkup($from.before(), undefined, { type: 'scene' })
-    if (becomes(/^[A-Z][A-Z .'-]*TO:$/)) return state.tr.setNodeMarkup($from.before(), undefined, { type: 'transition' })
+    const start = $from.before()
+    const retype = (type: ElementType, strip: [number, number] = [0, 0]) => {
+      const tr = state.tr.setNodeMarkup(start, undefined, { type })
+      // Remove Fountain syntax that only served to pick the type (e.g. "= " or "> … <").
+      if (strip[1]) tr.delete(start + 1 + text.length - strip[1], start + 1 + text.length)
+      if (strip[0]) tr.delete(start + 1, start + 1 + strip[0])
+      return tr
+    }
+    if (becomes(SCENE_HEADING_RE)) return retype('scene')
+    if (becomes(/^[A-Z][A-Z .'-]*TO:$/)) return retype('transition')
+    // Fountain shortcuts: "===" page break, "# " section, "= " synopsis, "> text <" centered.
+    if (becomes(/^={3,}$/)) return retype('pagebreak', [text.length, 0])
+    if (becomes(/^#+ /)) return retype('section')
+    if (becomes(/^= /) && !/^==/.test(text)) return retype('synopsis', [2, 0])
+    if (becomes(/^>.*\S.*<$/)) {
+      const lead = /^>\s*/.exec(text)![0].length
+      const trail = /\s*<$/.exec(text)![0].length
+      return retype('centered', [lead, trail])
+    }
     return null
   },
 })
 
+export interface LayoutOptions {
+  /** Show and print (CONT'D) when a character speaks again after action in the same scene. */
+  autoContd: boolean
+}
+
 export interface LayoutInfo {
+  options: LayoutOptions
   pageCount: number
   pageStarts: { page: number; el: number }[]
   decorations: DecorationSet
@@ -180,15 +271,67 @@ function pageBreakWidget(page: number) {
   return dom
 }
 
-function computeLayout(doc: PMNode): LayoutInfo {
+function autoContdWidget() {
+  const dom = document.createElement('span')
+  dom.className = 'auto-contd'
+  dom.contentEditable = 'false'
+  dom.textContent = " (CONT'D)"
+  return dom
+}
+
+/** Marks the elements of a dual-dialogue pair so CSS can put the two speeches side by side. */
+function dualDecorations(doc: PMNode, offsets: number[]): Decoration[] {
+  const out: Decoration[] = []
+  const nodes: PMNode[] = []
+  doc.forEach((n) => nodes.push(n))
+  const speechEnd = (start: number) => {
+    let i = start + 1
+    while (i < nodes.length && ['parenthetical', 'dialogue'].includes(nodes[i].attrs.type)) i++
+    return i
+  }
+  const mark = (from: number, to: number, cls: string) => {
+    for (let i = from; i < to; i++) out.push(Decoration.node(offsets[i], offsets[i] + nodes[i].nodeSize, { class: cls }))
+  }
+  nodes.forEach((node, i) => {
+    if (node.attrs.type !== 'character' || !node.attrs.dual) return
+    // The left speech is the character block right before this one.
+    let left = i - 1
+    while (left >= 0 && ['parenthetical', 'dialogue'].includes(nodes[left].attrs.type)) left--
+    if (left < 0 || nodes[left].attrs.type !== 'character' || nodes[left].attrs.dual) return
+    const end = speechEnd(i)
+    mark(left, i, 'el-dual el-dual-left')
+    mark(i, end, 'el-dual el-dual-right')
+    if (end < nodes.length) mark(end, end + 1, 'el-after-dual')
+  })
+  return out
+}
+
+function computeLayout(doc: PMNode, options: LayoutOptions): LayoutInfo {
   const elements = elementsFromDoc(doc)
-  const { pages, pageStarts } = paginate(elements)
+  const { pages, pageStarts, autoContd } = paginate(elements, { autoContd: options.autoContd })
   const offsets: number[] = []
   doc.forEach((_node, offset) => offsets.push(offset))
 
   const decorations: Decoration[] = pageStarts.map(({ page, el }) =>
     Decoration.widget(offsets[el], () => pageBreakWidget(page), { side: -1, key: `pb-${page}`, ignoreSelection: true }),
   )
+  for (const el of autoContd) {
+    const end = offsets[el] + doc.child(el).nodeSize - 1
+    decorations.push(Decoration.widget(end, autoContdWidget, { side: 1, key: 'auto-contd', ignoreSelection: true }))
+  }
+  decorations.push(...dualDecorations(doc, offsets))
+
+  // Notes and Fountain scene numbers stay in the text but are drawn as non-printing.
+  doc.forEach((node, offset) => {
+    const text = node.textContent
+    for (const m of text.matchAll(NOTE_RE)) {
+      decorations.push(Decoration.inline(offset + 1 + m.index, offset + 1 + m.index + m[0].length, { class: 'md-note' }))
+    }
+    if (node.attrs.type === 'scene') {
+      const m = SCENE_NUMBER_RE.exec(text)
+      if (m) decorations.push(Decoration.inline(offset + 1 + m.index, offset + 1 + text.length, { class: 'md-scenenum' }))
+    }
+  })
 
   let prev: ElementType | null = null
   doc.forEach((node, offset) => {
@@ -204,25 +347,41 @@ function computeLayout(doc: PMNode): LayoutInfo {
     prev = type
   })
 
-  return { pageCount: pages.length, pageStarts, decorations: DecorationSet.create(doc, decorations) }
+  return { options, pageCount: pages.length, pageStarts, decorations: DecorationSet.create(doc, decorations) }
 }
 
-const layout = new Plugin<LayoutInfo>({
-  key: layoutKey,
-  state: {
-    init: (_config, state) => computeLayout(state.doc),
-    apply: (tr, value) => (tr.docChanged ? computeLayout(tr.doc) : value),
-  },
-  props: {
-    decorations: (state) => layoutKey.getState(state)?.decorations,
-  },
-})
+function layoutPlugin(initial: LayoutOptions) {
+  return new Plugin<LayoutInfo>({
+    key: layoutKey,
+    state: {
+      init: (_config, state) => computeLayout(state.doc, initial),
+      apply(tr, value) {
+        const options = tr.getMeta(layoutKey) as LayoutOptions | undefined
+        if (options) return computeLayout(tr.doc, options)
+        if (!tr.docChanged) return value
+        const next = computeLayout(tr.doc, value.options)
+        // Keep the old page starts when nothing moved, so views watching them don't re-render.
+        const same =
+          next.pageStarts.length === value.pageStarts.length &&
+          next.pageStarts.every((s, i) => s.page === value.pageStarts[i].page && s.el === value.pageStarts[i].el)
+        return same ? { ...next, pageStarts: value.pageStarts } : next
+      },
+    },
+    props: {
+      decorations: (state) => layoutKey.getState(state)?.decorations,
+    },
+  })
+}
+
+export function setLayoutOptions(view: EditorView, options: LayoutOptions) {
+  view.dispatch(view.state.tr.setMeta(layoutKey, options).setMeta('addToHistory', false))
+}
 
 /** Plain-text clipboard speaks Fountain, so pasting between apps keeps element types. */
 const fountainClipboard = new Plugin({
   props: {
     clipboardTextParser(text) {
-      if (!text.includes('\n')) return text ? new Slice(Fragment.from(schema.text(text)), 0, 0) : Slice.empty
+      if (!text.includes('\n')) return text ? new Slice(Fragment.from(inlineNodes(text)), 0, 0) : Slice.empty
       const { elements } = fromFountain(text, { titlePage: false })
       return elements.length ? new Slice(Fragment.from(elements.map(elementNode)), 1, 1) : Slice.empty
     },
@@ -290,17 +449,19 @@ export function flashElement(view: EditorView, pos: number) {
 
 export interface EditorOptions {
   vim?: boolean
+  autoContd?: boolean
   /** Called for Vim's :w. */
   onWrite?: () => void
 }
 
 export function createState(elements: ScriptElement[], options: EditorOptions = {}): EditorState {
-  const typeKeys = Object.fromEntries(ELEMENT_TYPES.map((t, i) => [`Mod-Alt-${i + 1}`, setType(t)]))
+  const typeKeys = Object.fromEntries(PRIMARY_TYPES.map((t, i) => [`Mod-Alt-${i + 1}`, setType(t)]))
   return EditorState.create({
     doc: docFromElements(elements),
     plugins: [
       history(),
       vimPlugin({ enabled: Boolean(options.vim), enter, onWrite: options.onWrite }),
+      completionPlugin(elementsFromDoc),
       smartTyping,
       keymap({
         Enter: enter,
@@ -310,12 +471,16 @@ export function createState(elements: ScriptElement[], options: EditorOptions = 
         Backspace: backspaceEmptyPrevious,
         'Mod-z': undo,
         'Mod-y': redo,
+        'Mod-b': toggleMark(schema.marks.strong),
+        'Mod-i': toggleMark(schema.marks.em),
+        'Mod-u': toggleMark(schema.marks.underline),
         'Shift-Mod-z': redo,
         ...typeKeys,
       }),
       keymap(baseKeymap),
-      layout,
+      layoutPlugin({ autoContd: options.autoContd ?? true }),
       cursorHighlight,
+      findPlugin,
       fountainClipboard,
     ],
   })

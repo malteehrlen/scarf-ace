@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ELEMENT_LABELS, ELEMENT_TYPES, NEXT_ON_ENTER, NEXT_ON_TAB, type ElementType } from '../lib/screenplay'
+import { ELEMENT_LABELS, NEXT_ON_ENTER, NEXT_ON_TAB, PRIMARY_TYPES, type ElementType } from '../lib/screenplay'
 import { APP_NAME } from '../lib/about'
 
 const dialog = ref<HTMLDialogElement>()
@@ -26,7 +26,26 @@ const EXAMPLES: Record<ElementType, string> = {
   dialogue: 'I think it needs a better owner.',
   transition: 'CUT TO:',
   shot: 'CLOSE ON THE SCARF',
+  centered: 'THE END',
+  pagebreak: '(forces a new page)',
+  section: '# Act One',
+  synopsis: 'Maya decides to stay.',
 }
+const SPECIAL_TYPES: ElementType[] = ['centered', 'pagebreak', 'section', 'synopsis']
+const SPECIAL_SHORTCUTS: Partial<Record<ElementType, string>> = {
+  centered: '> THE END <',
+  pagebreak: '===',
+  section: '# Act One',
+  synopsis: '= Maya decides to stay.',
+}
+const SPECIAL_NOTES: Partial<Record<ElementType, string>> = {
+  centered: 'centered on the page',
+  pagebreak: 'starts a new page',
+  section: 'outline heading, not printed',
+  synopsis: 'summary of a scene or section, not printed',
+}
+const findKey = isMac ? '⌘F' : 'Ctrl+F'
+const replaceKey = isMac ? '⌘⌥F' : 'Ctrl+H'
 
 const SECTIONS = [
   { id: 'help-basics', label: 'The basics' },
@@ -65,9 +84,18 @@ function jump(id: string) {
           </p>
           <p>Each line is one of seven <strong>elements</strong>:</p>
           <ul class="help-elements">
-            <li v-for="t in ELEMENT_TYPES" :key="t">
+            <li v-for="t in PRIMARY_TYPES" :key="t">
               <span class="node-type" :class="`t-${t}`">{{ ELEMENT_LABELS[t] }}</span>
               <code>{{ EXAMPLES[t] }}</code>
+            </li>
+          </ul>
+          <p>And a few special ones, from the element dropdown or by typing their Fountain shortcut in an action line:</p>
+          <ul class="help-elements">
+            <li v-for="t in SPECIAL_TYPES" :key="t">
+              <span class="node-type" :class="`t-${t}`">{{ ELEMENT_LABELS[t] }}</span>
+              <span>
+                <code>{{ SPECIAL_SHORTCUTS[t] }}</code> <span class="muted">{{ SPECIAL_NOTES[t] }}</span>
+              </span>
             </li>
           </ul>
           <p class="help-tip">
@@ -86,7 +114,7 @@ function jump(id: string) {
               <tr><th>On a…</th><th><kbd>Enter</kbd> starts</th><th><kbd>Tab</kbd> turns it into</th></tr>
             </thead>
             <tbody>
-              <tr v-for="t in ELEMENT_TYPES" :key="t">
+              <tr v-for="t in PRIMARY_TYPES" :key="t">
                 <td><span class="node-type" :class="`t-${t}`">{{ ELEMENT_LABELS[t] }}</span></td>
                 <td>{{ ELEMENT_LABELS[NEXT_ON_ENTER[t]] }}</td>
                 <td>{{ ELEMENT_LABELS[NEXT_ON_TAB[t]] }}</td>
@@ -98,6 +126,23 @@ function jump(id: string) {
             <li>Typing <code>INT.</code> or <code>EXT.</code> at the start of an action line makes it a scene heading; <code>CUT TO:</code> becomes a transition.</li>
             <li>In empty dialogue, typing <kbd>(</kbd> starts a parenthetical, and <kbd>)</kbd> at its end takes you back to dialogue. The parentheses are added for you.</li>
             <li>Choose any element directly with the dropdown in the toolbar or <kbd>{{ typeKey(0) }}</kbd>…<kbd>{{ typeKey(6) }}</kbd>.</li>
+            <li>
+              <strong>Autocomplete</strong> suggests character names you've used (and <code>(V.O.)</code>, <code>(O.S.)</code>… after a
+              <kbd>(</kbd>), scene headings piece by piece (INT./EXT., places you've used, times of day) and transitions.
+              <kbd>↑</kbd><kbd>↓</kbd> to choose, <kbd>Tab</kbd> or <kbd>Enter</kbd> to accept, <kbd>Esc</kbd> to dismiss.
+            </li>
+            <li>
+              <strong>Bold</strong>, <em>italic</em> and <u>underline</u> with <kbd>{{ mod }}+B</kbd>, <kbd>{{ mod }}+I</kbd> and
+              <kbd>{{ mod }}+U</kbd>. They print in the PDF too.
+            </li>
+            <li>
+              <strong>Notes</strong>: anything in double brackets, <code>[[like this]]</code>, is a note to yourself. It's shown
+              highlighted and never printed.
+            </li>
+            <li>
+              <strong>Dual dialogue</strong> (two characters talking at once): type <kbd>^</kbd> at the end of the second character's
+              name. The two speeches sit side by side, on screen and in the PDF.
+            </li>
             <li>Copy and paste work in the <a href="https://fountain.io" target="_blank" rel="noopener" data-tip="fountain.io (opens in a new tab)">Fountain</a> plain-text format, so pasting a scene from another app keeps its elements.</li>
           </ul>
           <p class="help-tip">A wavy red underline means dialogue without a character name above it.</p>
@@ -123,6 +168,16 @@ function jump(id: string) {
             </li>
             <li><strong>Follow cursor</strong> (◎ above the scene list) keeps the scene you're writing in open and highlighted. Turn it off to browse freely.</li>
             <li><strong>Page breaks</strong> appear right in the page, in the same places as in the PDF. The status bar shows which page you're on.</li>
+            <li>
+              <strong>Find &amp; replace</strong> with the magnifier in the toolbar, <kbd>{{ findKey }}</kbd> or
+              <kbd>{{ replaceKey }}</kbd>. Replacing keeps capitalization, so renaming Maya to Mia also turns the cue
+              <code>MAYA</code> into <code>MIA</code>. Replace all is a single undo.
+            </li>
+            <li>
+              <strong>File › Script report…</strong> shows page count, estimated runtime, each scene's length in eighths of a
+              page and how much each character speaks. Click a scene to jump to it.
+            </li>
+            <li><strong>Sections</strong> (<code># Act One</code>) appear as dividers in the scenes sidebar, with their synopsis.</li>
             <li><strong>Title page.</strong> Click the script's name in the toolbar (or File › Title page…) to set the title, author, contact details and draft date.</li>
           </ul>
         </section>
@@ -136,8 +191,12 @@ function jump(id: string) {
           <ul>
             <li><strong>File › Download backup</strong> or <kbd>{{ mod }}+S</kbd> saves a <code>.fountain</code> file you can keep anywhere.</li>
             <li>After a new page or half an hour of writing, a reminder offers to do it for you (you can turn reminders off in ⚙ Settings). The status bar shows when you last backed up.</li>
-            <li><strong>File › Import Fountain…</strong> opens a backup again, or a script from Trelby, Highland, Fade In and other apps that speak Fountain.</li>
+            <li><strong>File › Import…</strong> opens a backup again, or a script from another app: Fountain files (Trelby, Highland, Fade In…) and Final Draft <code>.fdx</code> files.</li>
             <li><strong>File › Open…</strong> switches between the scripts saved in this browser.</li>
+            <li>
+              If the same script is open in two tabs and one of them saves, the other pauses its own saving and asks which
+              version to keep, so neither tab silently overwrites the other.
+            </li>
           </ul>
         </section>
 
@@ -148,6 +207,24 @@ function jump(id: string) {
             numbers and proper page breaks: scene headings are never stranded at the bottom of a page, and dialogue that
             continues on the next page gets <code>(MORE)</code> and <code>(CONT'D)</code>.
           </p>
+          <ul>
+            <li>
+              Before exporting you can choose <strong>scene numbers</strong> in both margins for shooting scripts
+              (remembered per script; leave them off for spec scripts), and <strong>automatic (CONT'D)</strong>. Press
+              <kbd>Enter</kbd> to export straight away.
+            </li>
+            <li>
+              <strong>Automatic (CONT'D)</strong> marks a character who speaks again after some action in the same scene. It's on
+              by default, shown in grey while you write, and can be turned off in ⚙ Settings.
+            </li>
+            <li>Sections, synopses and notes never print. Scene numbers from Fountain files (<code>#12A#</code>) are kept.</li>
+            <li>
+              <strong>File › Export Final Draft (.fdx)…</strong> saves a copy for Final Draft and the many apps that read its
+              format. A few things work differently there (sections, synopses, notes); the export asks what to do with
+              them, and so does importing an <code>.fdx</code> file. Final Draft adds its own <code>(MORE)</code> and
+              <code>(CONT'D)</code>, so its page breaks can differ slightly from this PDF.
+            </li>
+          </ul>
         </section>
 
         <section :id="SECTIONS[5].id">
@@ -156,7 +233,9 @@ function jump(id: string) {
             <tbody>
               <tr><td><kbd>Enter</kbd></td><td>Next element</td></tr>
               <tr><td><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd></td><td>Change the current element</td></tr>
-              <tr v-for="(t, i) in ELEMENT_TYPES" :key="t"><td><kbd>{{ typeKey(i) }}</kbd></td><td>{{ ELEMENT_LABELS[t] }}</td></tr>
+              <tr v-for="(t, i) in PRIMARY_TYPES" :key="t"><td><kbd>{{ typeKey(i) }}</kbd></td><td>{{ ELEMENT_LABELS[t] }}</td></tr>
+              <tr><td><kbd>{{ mod }}+B</kbd> / <kbd>{{ mod }}+I</kbd> / <kbd>{{ mod }}+U</kbd></td><td>Bold / italic / underline</td></tr>
+              <tr><td><kbd>{{ findKey }}</kbd> / <kbd>{{ replaceKey }}</kbd></td><td>Find / find &amp; replace</td></tr>
               <tr><td><kbd>{{ mod }}+S</kbd></td><td>Download a Fountain backup</td></tr>
               <tr><td><kbd>{{ mod }}+Z</kbd> / <kbd>{{ isMac ? '⌘⇧Z' : 'Ctrl+Y' }}</kbd></td><td>Undo / redo</td></tr>
               <tr><td><kbd>{{ mod }}+\</kbd></td><td>Show or hide the scenes sidebar</td></tr>

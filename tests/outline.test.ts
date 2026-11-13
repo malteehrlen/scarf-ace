@@ -45,3 +45,30 @@ describe('buildOutline', () => {
     expect(characterName("maya (V.O.) (CONT'D)")).toBe('MAYA')
   })
 })
+
+describe('outline structure', () => {
+  it('attaches sections to the next scene and the synopsis to its scene', () => {
+    const [s1, s2] = buildOutline([
+      { type: 'section', text: '# Act One' },
+      { type: 'synopsis', text: 'Everything goes wrong.' },
+      { type: 'section', text: '## Arrival' },
+      { type: 'scene', text: 'INT. A' },
+      { type: 'synopsis', text: 'Maya arrives.' },
+      { type: 'action', text: 'Rain.' },
+      { type: 'section', text: '# Act Two' },
+      { type: 'scene', text: 'INT. B' },
+    ])
+    expect(s1.sections).toEqual([
+      { index: 0, text: 'Act One', depth: 1, synopsis: 'Everything goes wrong.' },
+      { index: 2, text: 'Arrival', depth: 2, synopsis: '' },
+    ])
+    expect(s1.synopsis).toBe('Maya arrives.')
+    expect(s1.children.map((n) => n.type)).toEqual(['action'])
+    expect(s2.sections.map((s) => s.text)).toEqual(['Act Two'])
+  })
+
+  it('uses plain names for the cast, whatever the markup', () => {
+    const [s] = buildOutline([{ type: 'scene', text: 'INT. A' }, { type: 'character', text: '**Maya** (V.O.)' }, { type: 'dialogue', text: 'Hi.' }])
+    expect(s.characters).toEqual(['MAYA'])
+  })
+})

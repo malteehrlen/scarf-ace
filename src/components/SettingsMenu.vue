@@ -6,6 +6,7 @@ import { onSystemThemeChange, resolveTheme, type ThemePreference } from '../lib/
 const theme = defineModel<ThemePreference>('theme', { required: true })
 const vim = defineModel<boolean>('vim', { required: true })
 const reminders = defineModel<boolean>('reminders', { required: true })
+const autoContd = defineModel<boolean>('autoContd', { required: true })
 
 const THEMES: { value: ThemePreference; label: string; tip: string }[] = [
   { value: 'system', label: 'System', tip: "Follow your computer's light or dark setting" },
@@ -20,7 +21,7 @@ onBeforeUnmount(stop)
 </script>
 
 <template>
-  <MenuButton label="Settings" tip="Settings: theme, reminders and keyboard" align="right" trigger-class="icon-trigger">
+  <MenuButton label="Settings" tip="Settings: theme, writing and keyboard" align="right" trigger-class="icon-trigger">
     <template #trigger>
       <svg class="menu-icon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
         <circle cx="12" cy="12" r="3" />
@@ -52,6 +53,18 @@ onBeforeUnmount(stop)
       </button>
     </div>
     <div class="menu-separator" role="separator" />
+    <button
+      class="menu-item"
+      role="menuitemcheckbox"
+      :aria-checked="autoContd"
+      tabindex="-1"
+      data-tip="Add (CONT'D) when a character speaks again after action in the same scene"
+      data-tip-side="left"
+      @click="autoContd = !autoContd"
+    >
+      <span class="checkbox" aria-hidden="true" />
+      <span class="menu-label">Automatic (CONT'D)</span>
+    </button>
     <button
       class="menu-item"
       role="menuitemcheckbox"
