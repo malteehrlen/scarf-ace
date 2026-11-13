@@ -599,6 +599,31 @@ const typeModel = computed({
 })
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+
+// "Install as an app": Chromium browsers announce when the app can be installed; we keep that
+// prompt and offer it from the Help menu. (Safari has no prompt; Help explains its menu instead.)
+interface InstallPrompt extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+const installPrompt = shallowRef<InstallPrompt | null>(null)
+const onBeforeInstall = (e: Event) => {
+  e.preventDefault()
+  installPrompt.value = e as InstallPrompt
+}
+const onInstalled = () => (installPrompt.value = null)
+window.addEventListener('beforeinstallprompt', onBeforeInstall)
+window.addEventListener('appinstalled', onInstalled)
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+  window.removeEventListener('appinstalled', onInstalled)
+})
+async function installApp() {
+  const prompt = installPrompt.value
+  if (!prompt) return
+  await prompt.prompt()
+  if ((await prompt.userChoice).outcome === 'accepted') installPrompt.value = null
+}
 const typeShortcuts = `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}1–${PRIMARY_TYPES.length}`
 const TYPE_GROUPS: { label: string; types: ElementType[] }[] = [
   { label: 'Screenplay', types: PRIMARY_TYPES },
@@ -690,6 +715,17 @@ const sidebarShortcut = isMac ? '⌘\\' : 'Ctrl+\\'
         <button class="menu-item" role="menuitem" tabindex="-1" data-tip="How everything works, with all shortcuts" data-tip-side="left" @click="helpDialog?.open()">
           <span class="menu-label">Help &amp; shortcuts</span>
           <kbd class="menu-note">F1</kbd>
+        </button>
+        <button
+          v-if="installPrompt"
+          class="menu-item"
+          role="menuitem"
+          tabindex="-1"
+          data-tip="Opens in its own window, from your dock or start menu, and works offline"
+          data-tip-side="left"
+          @click="installApp"
+        >
+          <span class="menu-label">Install as an app</span>
         </button>
         <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Free software, feedback and the fine print" data-tip-side="left" @click="aboutDialog?.open()">
           <span class="menu-label">About {{ APP_NAME }}</span>

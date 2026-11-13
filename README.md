@@ -38,6 +38,8 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 - **Zoom.** Fit width (the page fills the writing area, edge to edge) or 75–200%, from the status bar. Line and page breaks
   never change, only the size.
 - **Focus mode.** Ctrl+Shift+F (⌘⇧F) hides everything but the page; Esc returns (double Esc with Vim on).
+- **Installable and offline.** Install it from the browser (Chrome/Edge: Help › Install as an app;
+  Safari: Add to Dock / Home Screen) and it opens in its own window and works without internet.
 - **Built-in help.** The ? menu (or F1 / Ctrl+/) explains everything; every control has a tooltip.
 - **Backup reminders.** localStorage is easy to lose, so after you add a page or write for 30 active
   minutes, a card nudges you to download a Fountain backup (can be turned off in ⚙ Settings). Ctrl/⌘+S downloads one any time.
@@ -99,6 +101,10 @@ The app is static files only. `.github/workflows/deploy.yml` tests, builds and p
 GitHub Pages on every push to `main` (one-time setup: repository Settings → Pages → Source:
 "GitHub Actions"). The build uses relative paths (`base: './'` in `vite.config.ts`), so it works at
 `https://<user>.github.io/<repo>/` or on a custom domain without changes.
+
+`VITE_SITE_URL` in `.env` is the public address used for link previews (Open Graph), the canonical
+URL and `sitemap.xml`; change it if the site moves. Builds also generate `sw.js` (offline cache of
+exactly that build's files), `robots.txt` and `sitemap.xml` (see `build/site-files.ts`).
 
 Scripts live in the browser's localStorage for the site's origin. Moving the app to another address
 (e.g. adding a custom domain later) starts with an empty library there, so users would need to

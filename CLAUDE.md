@@ -53,6 +53,13 @@ Browser screenplay editor (Vue 3 + Vite + TS, ProseMirror, jsPDF). See README fo
   into every build from the packages actually bundled, and fails the build if one has no license
   file. Before adding a runtime dependency, check its license is permissive (no GPL/AGPL/LGPL).
 
+## Distribution
+- `build/site-files.ts` generates `sw.js` (precaches the build; new versions take over when all tabs
+  are closed), `robots.txt`, `sitemap.xml`. The service worker is registered in production only.
+- Link previews / SEO metadata live in `index.html` and use `%VITE_SITE_URL%` from `.env`.
+- Icons: SVG masters in `public/icons/` (`icon.svg`, `icon-small.svg` for favicons, `icon-maskable.svg`);
+  PNGs and `public/social-card.png` are rendered from them / a screenshot and committed.
+
 ## Conventions
 - Element text is stored as typed: no forced caps, parentheticals without parens (case/parens are
   applied at display/export time), plus Fountain inline markup (emphasis, notes, scene numbers).

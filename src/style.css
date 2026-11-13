@@ -127,6 +127,24 @@ button.link { border: none; background: none; padding: 0; text-align: left; }
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
+/*
+ * Installed app with the title bar hidden (window controls overlay): the toolbar takes its place.
+ * It avoids the window controls (and the app menu) using the title-bar area Chrome reports, and
+ * its empty parts drag the window.
+ */
+@media (display-mode: window-controls-overlay) {
+  .toolbar {
+    min-height: env(titlebar-area-height, 0px);
+    padding-left: calc(env(titlebar-area-x, 0px) + 12px);
+    padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 12px);
+    app-region: drag;
+    -webkit-app-region: drag;
+  }
+  .toolbar button, .toolbar select, .toolbar input, .toolbar .menu-list {
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
+  }
+}
 .statusbar { border-bottom: none; border-top: 1px solid var(--line); padding: 4px 12px; color: var(--muted); font-size: 12px; gap: 16px; }
 .statusbar strong { color: var(--ink); }
 .statusbar .save.error { color: var(--danger); }

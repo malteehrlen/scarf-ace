@@ -30,8 +30,17 @@ export function resolveTheme(preference: ThemePreference): Theme {
   return darkQuery().matches ? 'dark' : 'light'
 }
 
+/**
+ * Toolbar color per theme (the --panel token). Installed apps paint their window controls with the
+ * page's theme color, so it matches the toolbar the controls sit in. Keep in sync with style.css
+ * and the inline script in index.html.
+ */
+export const THEME_COLORS: Record<Theme, string> = { light: '#f7f6f3', dark: '#19191c' }
+
 export function applyTheme(preference: ThemePreference) {
-  document.documentElement.dataset.theme = resolveTheme(preference)
+  const theme = resolveTheme(preference)
+  document.documentElement.dataset.theme = theme
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme])
 }
 
 /** Calls back when the OS switches between light and dark. Returns a function that stops listening. */

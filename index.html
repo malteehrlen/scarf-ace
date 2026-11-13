@@ -6,7 +6,45 @@
     <link rel="icon" href="./icons/icon-small.svg" type="image/svg+xml" />
     <link rel="icon" href="./icons/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-    <title>Scarf Ace</title>
+    <title>Scarf Ace · Free screenwriting software in your browser</title>
+    <meta
+      name="description"
+      content="Free screenwriting app that runs in your browser. Industry-standard screenplay formatting, print-ready PDF, Fountain and Final Draft import and export. No account; your script stays on your computer."
+    />
+    <link rel="canonical" href="%VITE_SITE_URL%" />
+    <meta name="theme-color" content="#f7f6f3" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <!-- Link previews (WhatsApp, Slack, Discord, iMessage, email…). Image URLs must be absolute. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Scarf Ace" />
+    <meta property="og:title" content="Scarf Ace · Free screenwriting in your browser" />
+    <meta
+      property="og:description"
+      content="Industry-standard formatting done for you. Print-ready PDF, Fountain and Final Draft. No account; your script never leaves your computer."
+    />
+    <meta property="og:url" content="%VITE_SITE_URL%" />
+    <meta property="og:image" content="%VITE_SITE_URL%social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Scarf Ace: free screenwriting in your browser, with a formatted screenplay page" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- For search engines: what this is, and that it's free. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Scarf Ace",
+        "url": "%VITE_SITE_URL%",
+        "description": "Free screenwriting software that runs in your browser: industry-standard screenplay formatting, print-ready PDF, Fountain and Final Draft import and export.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any (web browser)",
+        "isAccessibleForFree": true,
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+      }
+    </script>
     <script>
       // Apply the theme before first paint (same logic as src/lib/theme.ts).
       ;(function () {
@@ -16,11 +54,20 @@
         } catch (e) {}
         var dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        // Installed app: window controls take the toolbar's color (THEME_COLORS in theme.ts).
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#19191c' : '#f7f6f3')
       })()
     </script>
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      <h1>Scarf Ace</h1>
+      <p>
+        Free screenwriting software that runs in your browser: industry-standard screenplay formatting, print-ready PDF,
+        Fountain and Final Draft import and export. Please enable JavaScript to use it.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

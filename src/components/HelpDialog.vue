@@ -199,6 +199,12 @@ function jump(id: string) {
             <li><strong>File › Import…</strong> opens a backup again, or a script from another app: Fountain files (Trelby, Highland, Fade In…) and Final Draft <code>.fdx</code> files.</li>
             <li><strong>File › Open…</strong> switches between the scripts saved in this browser.</li>
             <li>
+              <strong>Use it like an app, even offline.</strong> In Chrome or Edge, choose <strong>? › Install as an app</strong>
+              (or the install icon in the address bar). In Safari, use <strong>File › Add to Dock</strong> on a Mac or
+              <strong>Share › Add to Home Screen</strong> on iPhone and iPad. Once it has been opened, it also works without
+              an internet connection.
+            </li>
+            <li>
               If the same script is open in two tabs and one of them saves, the other pauses its own saving and asks which
               version to keep, so neither tab silently overwrites the other.
             </li>
