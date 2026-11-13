@@ -150,3 +150,50 @@ describe('emphasis and Fountain extras in the editor', () => {
     expect(typed('> THE END <')).toEqual({ type: 'centered', text: 'THE END' })
   })
 })
+
+describe('character names in prose', () => {
+  const ghostOf = (s: EditorState) => {
+    for (const p of s.plugins) {
+      const set = p.props.decorations?.call(p, s) as import('prosemirror-view').DecorationSet | null | undefined
+      const found = set?.find().find((d) => String((d as unknown as { spec: { key?: string } }).spec.key ?? '').startsWith('ghost-'))
+      if (found) return String((found as unknown as { spec: { key: string } }).spec.key).slice(6)
+    }
+    return null
+  }
+  const press = (s: EditorState, key: string) => {
+    let next = s
+    const view = { state: s, dispatch: (tr: Transaction) => (next = s.apply(tr)) } as never
+    const event = { key, keyCode: 9, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, stopPropagation() {} } as never
+    for (const p of s.plugins) if (p.props.handleKeyDown?.call(p, view, event)) return { state: next, handled: true }
+    return { state: next, handled: false }
+  }
+  const script: ScriptElement[] = [
+    { type: 'character', text: 'Maya' },
+    { type: 'dialogue', text: 'Hi.' },
+    { type: 'action', text: '' },
+  ]
+
+  it('suggests the rest of the name after typing, and Tab accepts it', () => {
+    let s = at(createState(script), 2)
+    s = typeText(s, 'Then Ma')
+    expect(ghostOf(s)).toBe('ya')
+    const { state, handled } = press(s, 'Tab')
+    expect(handled).toBe(true)
+    expect(elementsFromDoc(state.doc)[2].text).toBe('Then Maya')
+  })
+
+  it('matches capitals for a first introduction', () => {
+    let s = at(createState(script), 2)
+    s = typeText(s, 'MA')
+    expect(press(s, 'Tab').state.doc.child(2).textContent).toBe('MAYA')
+  })
+
+  it('hides when the cursor moves, and never takes Enter', () => {
+    let s = at(createState(script), 2)
+    s = typeText(s, 'Ma')
+    const afterEnter = press(s, 'Enter').state // Enter keeps its job: a new line, name not accepted
+    expect(elementsFromDoc(afterEnter.doc).slice(2).map((e) => e.text)).toEqual(['Ma', ''])
+    s = at(s, 2) // a cursor move without typing
+    expect(ghostOf(s)).toBeNull()
+  })
+})

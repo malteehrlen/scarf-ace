@@ -132,6 +132,11 @@ function jump(id: string) {
               <kbd>↑</kbd><kbd>↓</kbd> to choose, <kbd>Tab</kbd> or <kbd>Enter</kbd> to accept, <kbd>Esc</kbd> to dismiss.
             </li>
             <li>
+              <strong>Names in action and dialogue</strong> complete too: type the first letters of a character's name with a
+              capital (<code>Ma</code>) and the rest appears in grey. <kbd>Tab</kbd> accepts it, or just keep typing. Typing in
+              capitals (<code>MA</code>) gives <code>MAYA</code>, for a character's first appearance.
+            </li>
+            <li>
               <strong>Bold</strong>, <em>italic</em> and <u>underline</u> with <kbd>{{ mod }}+B</kbd>, <kbd>{{ mod }}+I</kbd> and
               <kbd>{{ mod }}+U</kbd>. They print in the PDF too.
             </li>

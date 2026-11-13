@@ -108,3 +108,29 @@ export function suggest(type: ElementType, text: string, vocab: Vocabulary): Sug
   }
   return null
 }
+
+/** Element types where character names are completed inline while writing prose. */
+export const NAME_COMPLETION_TYPES: ElementType[] = ['action', 'dialogue', 'parenthetical', 'shot', 'centered', 'synopsis', 'section']
+
+/** "DETECTIVE RUIZ" → "Detective Ruiz", "O'BRIEN" → "O'Brien", "MARY-JANE" → "Mary-Jane". */
+export function titleCase(name: string): string {
+  return name.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase())
+}
+
+/**
+ * A character name to complete inline in prose. `before` is the text up to the cursor and `after`
+ * the character right after it. Suggests only after two letters starting with a capital (names are
+ * proper nouns), and matches the case typed: "MA" → "MAYA", "Ma" → "Maya". Returns the full word.
+ */
+export function suggestName(before: string, after: string, vocab: Vocabulary): string | null {
+  if (after && /[\p{L}\p{N}]/u.test(after)) return null // not at the end of a word
+  const typed = /(?:^|[^\p{L}\p{N}'-])([\p{L}][\p{L}'-]*)$/u.exec(before)?.[1]
+  if (!typed || typed.length < 2 || typed[0] !== typed[0].toUpperCase() || typed[0] === typed[0].toLowerCase()) return null
+  const upper = typed.toUpperCase()
+  const name = vocab.characters.find((n) => n.startsWith(upper) && n.length > typed.length)
+  if (!name) return null
+  // Typed in capitals ("MA") gets the name in capitals, unless it's also how the name starts in
+  // normal case ("O'B" for O'Brien).
+  const normal = titleCase(name)
+  return typed === upper && !normal.startsWith(typed) ? name : normal
+}

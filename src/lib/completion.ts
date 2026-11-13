@@ -1,9 +1,9 @@
 // The autocomplete popup in the editor: suggestions below the cursor; ↑/↓ choose, Tab/Enter accept,
 // Esc dismisses. Only active at the end of a character cue, scene heading or transition.
 import { Plugin, PluginKey, type EditorState } from 'prosemirror-state'
-import type { EditorView } from 'prosemirror-view'
+import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view'
 import type { Node as PMNode } from 'prosemirror-model'
-import { suggest, vocabulary, type Suggestions, type Vocabulary } from './autocomplete'
+import { NAME_COMPLETION_TYPES, suggest, suggestName, vocabulary, type Suggestions, type Vocabulary } from './autocomplete'
 import { vimKey } from './vim'
 import type { ElementType, ScriptElement } from './screenplay'
 
@@ -160,6 +160,100 @@ export function completionPlugin(elementsOf: (doc: PMNode) => ScriptElement[]): 
           ui?.update()
           return false
         },
+      },
+    },
+  })
+}
+
+// --- Character names in prose: inline "ghost text", accepted with Tab -------------------------
+// A popup would get in the way while writing sentences (Enter starts a new line, arrows move), so
+// prose gets the rest of the name in grey after the cursor. Tab accepts; anything else ignores it.
+
+interface NameState {
+  /** Shown only right after typing, not when the cursor is merely moved next to a word. */
+  typing: boolean
+  /** "pos:text before the cursor" where the writer pressed Esc. */
+  dismissed: string | null
+}
+
+export const nameKey = new PluginKey<NameState>('name-completion')
+
+interface Ghost {
+  /** Start of the word being completed, and the cursor. */
+  from: number
+  to: number
+  name: string
+}
+
+export function namePlugin(elementsOf: (doc: PMNode) => ScriptElement[]): Plugin<NameState> {
+  let cache: { doc: PMNode; vocab: Vocabulary } | null = null
+  const vocabFor = (doc: PMNode) => {
+    if (cache?.doc !== doc) cache = { doc, vocab: vocabulary(elementsOf(doc)) }
+    return cache.vocab
+  }
+
+  const ghostFor = (state: EditorState): Ghost | null => {
+    const ns = nameKey.getState(state)
+    const { selection } = state
+    if (!ns?.typing || !selection.empty) return null
+    const vim = vimKey.getState(state)
+    if (vim?.enabled && vim.mode !== 'insert') return null
+    const { $head } = selection
+    if ($head.depth !== 1 || !NAME_COMPLETION_TYPES.includes($head.parent.attrs.type)) return null
+    const text = $head.parent.textContent
+    const before = text.slice(0, $head.parentOffset)
+    if (ns.dismissed === `${$head.pos}:${before}`) return null
+    const name = suggestName(before, text.charAt($head.parentOffset), vocabFor(state.doc))
+    if (!name) return null
+    const typed = /[\p{L}][\p{L}'-]*$/u.exec(before)![0]
+    return { from: $head.pos - typed.length, to: $head.pos, name }
+  }
+
+  const ghostWidget = (rest: string) => () => {
+    const dom = document.createElement('span')
+    dom.className = 'name-ghost'
+    dom.contentEditable = 'false'
+    dom.setAttribute('aria-hidden', 'true')
+    dom.textContent = rest
+    return dom
+  }
+
+  return new Plugin<NameState>({
+    key: nameKey,
+    state: {
+      init: () => ({ typing: false, dismissed: null }),
+      apply(tr, value) {
+        const dismissed = tr.getMeta(nameKey) as string | undefined
+        if (dismissed !== undefined) return { ...value, dismissed }
+        // Esc means "not now": any further typing offers names again.
+        if (tr.docChanged) return { typing: true, dismissed: null }
+        return tr.selectionSet ? { typing: false, dismissed: null } : value
+      },
+    },
+    props: {
+      decorations(state) {
+        const ghost = ghostFor(state)
+        if (!ghost) return null
+        const typedLength = ghost.to - ghost.from
+        const rest = ghost.name.slice(typedLength)
+        return DecorationSet.create(state.doc, [Decoration.widget(ghost.to, ghostWidget(rest), { side: 1, key: `ghost-${rest}` })])
+      },
+      handleKeyDown(view, e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
+        const ghost = ghostFor(view.state)
+        if (!ghost) return false
+        if (e.key === 'Tab') {
+          // Replace the typed part too, so its case matches the name ("De" stays "De…", "MA" → "MAYA").
+          view.dispatch(view.state.tr.insertText(ghost.name, ghost.from, ghost.to).scrollIntoView())
+          return true
+        }
+        if (e.key === 'Escape') {
+          const { $head } = view.state.selection
+          view.dispatch(view.state.tr.setMeta(nameKey, `${$head.pos}:${$head.parent.textContent.slice(0, $head.parentOffset)}`))
+          e.stopPropagation() // only hide the suggestion, not e.g. focus mode
+          return true
+        }
+        return false
       },
     },
   })

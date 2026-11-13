@@ -492,6 +492,14 @@ button.icon.on { color: var(--accent); background: var(--tree-active); }
 .conflict-banner > span { flex: 1; }
 .conflict-banner button { flex: none; white-space: nowrap; }
 
+/* Character name suggested inline in prose: rest of the name in grey, Tab accepts. Absolutely
+   positioned so it never moves or re-wraps the real text. */
+.script .name-ghost { position: absolute; white-space: pre; color: var(--muted); opacity: 0.75; pointer-events: none; user-select: none; }
+.script .name-ghost::after {
+  content: 'Tab'; margin-left: 1ch; padding: 0 4px; border: 1px solid var(--line); border-radius: 3px;
+  font: 600 9px/12pt system-ui, sans-serif; letter-spacing: 0.04em; vertical-align: top; color: var(--muted); text-transform: none;
+}
+
 /* --- Find & replace --- */
 .find-bar {
   position: absolute; z-index: 9; top: 10px; right: 26px;

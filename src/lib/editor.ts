@@ -10,7 +10,7 @@ import { paginate } from './paginate'
 import { NOTE_RE, SCENE_NUMBER_RE, parseRuns, serializeRuns, type Run } from './markup'
 import { vimPlugin } from './vim'
 import { findPlugin } from './find'
-import { completionPlugin } from './completion'
+import { completionPlugin, namePlugin } from './completion'
 import {
   ELEMENT_LABELS,
   ELEMENT_TYPES,
@@ -462,6 +462,7 @@ export function createState(elements: ScriptElement[], options: EditorOptions = 
       history(),
       vimPlugin({ enabled: Boolean(options.vim), enter, onWrite: options.onWrite }),
       completionPlugin(elementsFromDoc),
+      namePlugin(elementsFromDoc),
       smartTyping,
       keymap({
         Enter: enter,

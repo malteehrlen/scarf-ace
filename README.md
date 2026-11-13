@@ -19,7 +19,8 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
   dialog where you choose what happens to it; defaults keep content.
 - **Bold, italic, underline** (Ctrl/⌘+B / I / U), stored as Fountain emphasis and printed in the PDF.
 - **Autocomplete** for character names and extensions, scene headings (INT./EXT., known locations,
-  times of day) and transitions.
+  times of day) and transitions. In action and dialogue, character names complete inline: type `Ma`
+  and press Tab for `Maya` (or `MA` → `MAYA` for a first appearance).
 - **Dual dialogue** side by side, on screen and in the PDF.
 - **Automatic (CONT'D)** when a character speaks again after action in the same scene (setting).
 - **Find & replace** (Ctrl/⌘+F, Ctrl+H / ⌘⌥F) that keeps capitalization: renaming Maya → Mia also

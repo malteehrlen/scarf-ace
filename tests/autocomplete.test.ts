@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseHeading, suggest, vocabulary } from '../src/lib/autocomplete'
+import { parseHeading, suggest, suggestName, titleCase, vocabulary } from '../src/lib/autocomplete'
 import type { ScriptElement } from '../src/lib/screenplay'
 
 const els: ScriptElement[] = [
@@ -51,5 +51,33 @@ describe('autocomplete', () => {
 
   it('parses headings with a dash in the location', () => {
     expect(parseHeading('INT. HOUSE - KITCHEN - DAY')).toEqual({ prefix: 'INT. ', location: 'HOUSE - KITCHEN', time: 'DAY' })
+  })
+})
+
+describe('character names in prose', () => {
+  const v = vocabulary([
+    { type: 'character', text: 'Maya' },
+    { type: 'character', text: 'Detective Ruiz' },
+    { type: 'character', text: "O'Brien" },
+    { type: 'character', text: 'Maya' },
+  ])
+
+  it('completes after a capital and two letters, matching the case typed', () => {
+    expect(suggestName('Then Ma', '', v)).toBe('Maya')
+    expect(suggestName('MA', ' ', v)).toBe('MAYA')
+    expect(suggestName('She sees De', '.', v)).toBe('Detective Ruiz')
+    expect(suggestName("Hi O'B", '', v)).toBe("O'Brien")
+  })
+
+  it('stays quiet when it would get in the way', () => {
+    expect(suggestName('ma', '', v)).toBeNull() // lowercase: an ordinary word
+    expect(suggestName('M', '', v)).toBeNull() // one letter is too little
+    expect(suggestName('Maya', '', v)).toBeNull() // already complete
+    expect(suggestName('Ma', 'r', v)).toBeNull() // in the middle of a word
+    expect(suggestName('Zo', '', v)).toBeNull() // no such character
+  })
+
+  it('title-cases names', () => {
+    expect(['MARY-JANE', 'DETECTIVE RUIZ', "O'BRIEN"].map(titleCase)).toEqual(['Mary-Jane', 'Detective Ruiz', "O'Brien"])
   })
 })
