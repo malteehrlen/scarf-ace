@@ -24,17 +24,17 @@ const fmt = (t: number) => new Date(t).toLocaleString()
   <dialog ref="dialog" class="modal" @click.self="dialog?.close()">
     <div class="form">
       <h2>Your scripts</h2>
-      <p class="hint">Scripts are saved in this browser only. Export to Fountain to back them up.</p>
+      <p class="hint">Scripts are saved in this browser only. Use File › Download backup to keep a copy elsewhere.</p>
       <ul class="library">
         <li v-for="s in scripts" :key="s.id" :class="{ current: s.id === currentId }">
-          <button class="link" @click="choose(s.id)">
+          <button class="link" :data-tip="s.id === currentId ? 'This script is already open' : 'Open this script'" @click="choose(s.id)">
             <strong>{{ s.title }}</strong>
             <small>{{ fmt(s.updatedAt) }}</small>
           </button>
-          <button class="ghost" title="Delete" @click="remove(s)">Delete</button>
+          <button class="ghost" data-tip="Delete this script from this browser (asks first)" @click="remove(s)">Delete</button>
         </li>
       </ul>
-      <div class="actions"><button @click="dialog?.close()">Close</button></div>
+      <div class="actions"><button data-tip="Close" data-tip-kbd="Esc" @click="dialog?.close()">Close</button></div>
     </div>
   </dialog>
 </template>

@@ -19,7 +19,7 @@ defineExpose({ open: () => dialog.value?.showModal() })
       <label>Draft date <input v-model="model.draftDate" placeholder="First Draft, November 2026" /></label>
       <label>Contact <textarea v-model="model.contact" rows="4" placeholder="Name&#10;Email&#10;Phone" /></label>
       <p class="hint">The title page is included in the PDF when a title is set.</p>
-      <div class="actions"><button class="primary">Done</button></div>
+      <div class="actions"><button class="primary" data-tip="Changes save as you type" data-tip-kbd="Esc">Done</button></div>
     </form>
   </dialog>
 </template>

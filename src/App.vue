@@ -5,7 +5,12 @@ import TitlePageDialog from './components/TitlePageDialog.vue'
 import LibraryDialog from './components/LibraryDialog.vue'
 import SceneTree from './components/SceneTree.vue'
 import BackupReminder from './components/BackupReminder.vue'
-import ThemeMenu from './components/ThemeMenu.vue'
+import MenuButton from './components/MenuButton.vue'
+import SettingsMenu from './components/SettingsMenu.vue'
+import HelpDialog from './components/HelpDialog.vue'
+import AboutDialog from './components/AboutDialog.vue'
+import AppTooltip from './components/AppTooltip.vue'
+import { APP_NAME } from './lib/about'
 import {
   ELEMENT_LABELS,
   ELEMENT_TYPES,
@@ -33,6 +38,8 @@ const editor = ref<InstanceType<typeof ScriptEditor>>()
 const titleDialog = ref<InstanceType<typeof TitlePageDialog>>()
 const libraryDialog = ref<InstanceType<typeof LibraryDialog>>()
 const fileInput = ref<HTMLInputElement>()
+const helpDialog = ref<InstanceType<typeof HelpDialog>>()
+const aboutDialog = ref<InstanceType<typeof AboutDialog>>()
 
 const saveState = ref<'saved' | 'pending' | 'error'>('saved')
 const busy = ref(false)
@@ -207,6 +214,11 @@ const backupLabel = computed(() => {
 
 // Writers press Ctrl/Cmd+S out of habit; make it do the one save that leaves the browser.
 function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'F1' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+    e.preventDefault()
+    helpDialog.value?.open()
+    return
+  }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
     e.preventDefault()
     exportFountain()
@@ -234,7 +246,7 @@ const typeModel = computed({
 })
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
-const shortcut = (i: number) => `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}${i + 1}`
+const typeShortcuts = `${isMac ? '⌘⌥' : 'Ctrl+Alt+'}1–${ELEMENT_TYPES.length}`
 const saveShortcut = isMac ? '⌘S' : 'Ctrl+S'
 </script>
 
@@ -242,20 +254,58 @@ const saveShortcut = isMac ? '⌘S' : 'Ctrl+S'
   <div class="app">
     <header class="toolbar">
       <span class="brand">Scarf&nbsp;Ace</span>
-      <button @click="createNew">New</button>
-      <button @click="libraryDialog?.open()">Open…</button>
-      <button @click="fileInput?.click()">Import Fountain</button>
+      <MenuButton label="File" tip="New, open, import and export scripts" trigger-class="text-trigger">
+        <template #trigger>File</template>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Start a new, empty script" data-tip-side="right" @click="createNew">
+          <span class="menu-label">New script</span>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Switch to another script saved in this browser" data-tip-side="right" @click="libraryDialog?.open()">
+          <span class="menu-label">Open…</span>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Open a .fountain file: a backup, or a script from another app" data-tip-side="right" @click="fileInput?.click()">
+          <span class="menu-label">Import Fountain…</span>
+        </button>
+        <div class="menu-separator" role="separator" />
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Title, author, contact details and draft date" data-tip-side="right" @click="titleDialog?.open()">
+          <span class="menu-label">Title page…</span>
+        </button>
+        <div class="menu-separator" role="separator" />
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Save a copy of this script as a Fountain file" data-tip-side="right" @click="exportFountain">
+          <span class="menu-label">Download backup (.fountain)</span>
+          <kbd class="menu-note">{{ saveShortcut }}</kbd>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" :disabled="busy" data-tip="Print-ready, industry-standard PDF" data-tip-side="right" @click="exportAsPdf">
+          <span class="menu-label">Export PDF</span>
+        </button>
+      </MenuButton>
       <input ref="fileInput" type="file" accept=".fountain,.spmd,.txt,text/plain" hidden @change="importFile" />
       <span class="sep" />
-      <select v-model="typeModel" class="type-select" title="Element type">
-        <option v-for="(t, i) in ELEMENT_TYPES" :key="t" :value="t">{{ ELEMENT_LABELS[t] }} ({{ shortcut(i) }})</option>
-      </select>
+      <button class="doc-title" data-tip="Edit the title page" @click="titleDialog?.open()">
+        <span class="doc-title-text">{{ script.titlePage.title || 'Untitled' }}</span>
+        <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4" /></svg>
+      </button>
       <span class="sep" />
-      <button class="title-btn" @click="titleDialog?.open()">{{ script.titlePage.title || 'Untitled' }}</button>
+      <select v-model="typeModel" class="type-select" :data-tip="'Element type of the current line'" :data-tip-kbd="`Tab · ${typeShortcuts}`" aria-label="Element type">
+        <option v-for="t in ELEMENT_TYPES" :key="t" :value="t">{{ ELEMENT_LABELS[t] }}</option>
+      </select>
       <span class="spacer" />
-      <ThemeMenu v-model="theme" />
-      <button @click="exportFountain">Export Fountain</button>
-      <button class="primary" :disabled="busy" @click="exportAsPdf">{{ busy ? 'Exporting…' : 'Export PDF' }}</button>
+      <SettingsMenu v-model:theme="theme" v-model:vim="vimEnabled" />
+      <MenuButton label="Help" tip="Help and about" align="right" trigger-class="icon-trigger">
+        <template #trigger>
+          <svg class="menu-icon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.6M12 17h.01" />
+          </svg>
+        </template>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="How everything works, with all shortcuts" data-tip-side="left" @click="helpDialog?.open()">
+          <span class="menu-label">Help &amp; shortcuts</span>
+          <kbd class="menu-note">F1</kbd>
+        </button>
+        <button class="menu-item" role="menuitem" tabindex="-1" data-tip="Free software, feedback and the fine print" data-tip-side="left" @click="aboutDialog?.open()">
+          <span class="menu-label">About {{ APP_NAME }}</span>
+        </button>
+      </MenuButton>
+      <button class="primary" :disabled="busy" data-tip="Download a print-ready PDF" @click="exportAsPdf">{{ busy ? 'Exporting…' : 'Export PDF' }}</button>
     </header>
 
     <main class="workspace">
@@ -282,37 +332,32 @@ const saveShortcut = isMac ? '⌘S' : 'Ctrl+S'
 
     <footer class="statusbar">
       <template v-if="status.vim.enabled">
-        <span class="vim-mode" :class="`vim-mode-${status.vim.mode}`">{{ VIM_MODE_LABELS[status.vim.mode] }}</span>
+        <span class="vim-mode" :class="`vim-mode-${status.vim.mode}`" tabindex="0" data-tip="Vim mode (turn off in ⚙ Settings)">{{ VIM_MODE_LABELS[status.vim.mode] }}</span>
         <span v-if="status.vim.pending" class="vim-pending">{{ status.vim.pending }}</span>
         <span v-else-if="status.vim.message" class="vim-message">{{ status.vim.message }}</span>
       </template>
-      <strong>{{ ELEMENT_LABELS[status.type] }}</strong>
-      <span>Enter → {{ ELEMENT_LABELS[NEXT_ON_ENTER[status.type]] }}</span>
-      <span>Tab → {{ ELEMENT_LABELS[NEXT_ON_TAB[status.type]] }}</span>
+      <strong tabindex="0" data-tip="Element type of the current line">{{ ELEMENT_LABELS[status.type] }}</strong>
+      <span tabindex="0" data-tip="What Enter starts next">Enter → {{ ELEMENT_LABELS[NEXT_ON_ENTER[status.type]] }}</span>
+      <span tabindex="0" data-tip="What Tab turns this line into">Tab → {{ ELEMENT_LABELS[NEXT_ON_TAB[status.type]] }}</span>
       <span class="spacer" />
-      <button
-        class="vim-toggle"
-        :class="{ on: vimEnabled }"
-        :aria-pressed="vimEnabled"
-        title="Vim keybindings"
-        @click="vimEnabled = !vimEnabled"
-      >
-        Vim
-      </button>
-      <span>Page {{ status.page }} of {{ status.pageCount }}</span>
+      <span tabindex="0" data-tip="Page with the cursor, and total pages as in the PDF">Page {{ status.page }} of {{ status.pageCount }}</span>
       <button
         class="backup-status"
         :class="{ due: reminder }"
-        :title="`Download a Fountain backup (${saveShortcut})`"
+        data-tip="Download a Fountain backup"
+        :data-tip-kbd="saveShortcut"
         @click="exportFountain"
       >
         {{ backupLabel }}
       </button>
-      <span :class="['save', saveState]">{{
+      <span :class="['save', saveState]" tabindex="0" data-tip="Every change is saved automatically in this browser">{{
         saveState === 'saved' ? 'Saved locally' : saveState === 'pending' ? 'Saving…' : 'Save failed — storage full?'
       }}</span>
     </footer>
 
+    <HelpDialog ref="helpDialog" />
+    <AboutDialog ref="aboutDialog" />
+    <AppTooltip />
     <BackupReminder :reason="reminder" :shortcut="saveShortcut" @backup="exportFountain" @later="remindLater" />
     <TitlePageDialog ref="titleDialog" v-model="script.titlePage" />
     <LibraryDialog

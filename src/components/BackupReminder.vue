@@ -25,8 +25,10 @@ const message = computed(() => {
         <p>{{ message }}</p>
         <p class="reminder-why">Scripts are stored only in this browser. Clearing site data or switching browsers loses them.</p>
         <div class="reminder-actions">
-          <button class="primary" @click="emit('backup')">Download .fountain</button>
-          <button class="ghost" @click="emit('later')">Later</button>
+          <button class="primary" data-tip="Save a copy of this script as a Fountain file" :data-tip-kbd="shortcut" @click="emit('backup')">
+            Download .fountain
+          </button>
+          <button class="ghost" data-tip="Remind me after another page or 15 more minutes" @click="emit('later')">Later</button>
         </div>
         <div class="reminder-hint">Tip: <kbd>{{ shortcut }}</kbd> downloads a backup any time.</div>
       </div>

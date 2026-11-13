@@ -105,9 +105,18 @@ const preview = (text: string) => text || '∅'
     <div class="tree-head">
       <h3>Scenes <span class="count">{{ scenes.filter((s) => s.number > 0).length }}</span></h3>
       <div class="tree-tools">
-        <button class="icon" :class="{ on: follow }" title="Follow cursor" @click="toggleFollow">◎</button>
-        <button class="icon" title="Expand all" @click="expandAll">⊞</button>
-        <button class="icon" title="Collapse all" @click="collapseAll">⊟</button>
+        <button
+          class="icon"
+          :class="{ on: follow }"
+          :aria-pressed="follow"
+          aria-label="Follow cursor"
+          :data-tip="follow ? 'Following the cursor: the scene you\'re in stays open. Click to browse freely' : 'Follow the cursor: keep the scene you\'re in open and highlighted'"
+          @click="toggleFollow"
+        >
+          ◎
+        </button>
+        <button class="icon" aria-label="Expand all" data-tip="Expand all scenes" @click="expandAll">⊞</button>
+        <button class="icon" aria-label="Collapse all" data-tip="Collapse all scenes" @click="collapseAll">⊟</button>
       </div>
     </div>
 
@@ -121,10 +130,15 @@ const preview = (text: string) => text || '∅'
         :class="{ 'is-current': activeScene === scene, open: isOpen(scene) }"
       >
         <div class="scene-row" :class="{ 'is-active': cursor === scene.index }">
-          <button class="chevron" :aria-expanded="isOpen(scene)" :title="isOpen(scene) ? 'Collapse' : 'Expand'" @click="toggle(scene)">
+          <button class="chevron" :aria-expanded="isOpen(scene)" :aria-label="isOpen(scene) ? 'Collapse scene' : 'Expand scene'"
+            :data-tip="isOpen(scene) ? 'Hide this scene\'s lines' : 'Show this scene\'s lines'" @click="toggle(scene)">
             <svg viewBox="0 0 10 10" width="10" height="10"><path d="M3 1.5 L7 5 L3 8.5" /></svg>
           </button>
-          <button class="scene-main" @click="emit('select', Math.max(scene.index, 0))">
+          <button
+            class="scene-main"
+            :data-tip="`Jump to scene ${scene.number || 'start'} (page ${pageOf(Math.max(scene.index, 0))})`"
+            @click="emit('select', Math.max(scene.index, 0))"
+          >
             <span class="scene-line">
               <span class="scene-num">{{ scene.number || '·' }}</span>
               <span class="scene-heading">{{ scene.number ? scene.heading || '(untitled scene)' : 'Before first scene' }}</span>
@@ -143,6 +157,8 @@ const preview = (text: string) => text || '∅'
                 class="node"
                 :class="{ 'is-active': cursor === node.index, 'is-path': activeCue === node.index }"
                 :tabindex="isOpen(scene) ? 0 : -1"
+                data-tip="Jump to this line"
+                data-tip-side="right"
                 @click="emit('select', node.index)"
               >
                 <span class="node-type" :class="`t-${node.type}`">{{ NODE_NAMES[node.type] }}</span>
@@ -154,6 +170,8 @@ const preview = (text: string) => text || '∅'
                     class="node"
                     :class="{ 'is-active': cursor === child.index }"
                     :tabindex="isOpen(scene) ? 0 : -1"
+                    data-tip="Jump to this line"
+                    data-tip-side="right"
                     @click="emit('select', child.index)"
                   >
                     <span class="node-type" :class="`t-${child.type}`">{{ NODE_NAMES[child.type] }}</span>

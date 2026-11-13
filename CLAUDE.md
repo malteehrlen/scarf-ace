@@ -12,6 +12,11 @@ Browser screenplay editor (Vue 3 + Vite + TS, ProseMirror, jsPDF). See README fo
 - `src/lib/outline.ts` — scene tree model for the sidebar (`SceneTree.vue`); dialogue nests under its cue.
 - `src/lib/vim.ts` — optional Vim mode as a ProseMirror plugin. Works on a linear text model
   (elements joined by '\n'); tests drive it via `vimFeed()` without a DOM.
+- `src/components/MenuButton.vue` — accessible dropdown menu (keyboard nav, focus return); File and
+  ⚙ Settings menus are built on it. Items are `.menu-item` elements with menu roles.
+- Tooltips: give every interactive element `data-tip="…"` (optional `data-tip-kbd`, `data-tip-side`),
+  rendered by `AppTooltip.vue`. Don't use `title` attributes.
+- `src/lib/about.ts` — app name/version/author and `FEEDBACK_URL` (TODO: set once the GitHub repo is public).
 - `src/lib/backup.ts` — when to remind about Fountain backups (state lives on `Script.backup`).
 - `src/lib/fountain.ts`, `src/lib/pdf.ts` (lazy-loaded), `src/lib/storage.ts` (localStorage).
 - `src/style.css` editor element CSS must stay in sync with `LAYOUT`.

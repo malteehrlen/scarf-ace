@@ -12,8 +12,9 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 - **Fountain import/export** for interoperability with Trelby, Highland, Fade In, etc. Copy/paste
   also speaks Fountain.
 - **Autosave** to localStorage, with multiple scripts.
-- **Dark mode.** Follows the system setting by default; the toolbar button cycles System → Light →
-  Dark and remembers the choice.
+- **Dark mode.** Follows the system setting by default; pick System / Light / Dark in the ⚙ settings
+  menu, and the choice is remembered.
+- **Built-in help.** The ? menu (or F1 / Ctrl+/) explains everything; every control has a tooltip.
 - **Backup reminders.** localStorage is easy to lose, so after you add a page or write for 30 active
   minutes, a card nudges you to download a Fountain backup. Ctrl/⌘+S downloads one any time.
 
@@ -33,7 +34,7 @@ Typing `INT.` / `EXT.` in an action line makes it a scene heading; `CUT TO:` mak
 
 ## Vim mode
 
-Optional; toggle **Vim** in the status bar (remembered per browser). Each screenplay element is a
+Optional; turn on **Vim keybindings** in the ⚙ settings menu (remembered per browser). Each screenplay element is a
 "line", so `j`/`k`, `dd`, `yy`/`p` work on whole elements and keep their types.
 
 - Modes: normal, insert, visual (`v`), visual-line (`V`); mode and pending keys show in the status bar
