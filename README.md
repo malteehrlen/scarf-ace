@@ -1,3 +1,5 @@
+<img src="public/icons/icon-256.png" alt="Scarf Ace icon: a script page with a spade" width="96" height="96">
+
 # Scarf Ace
 
 A free, browser-based screenplay editor. No account, no server — scripts live in your browser.
