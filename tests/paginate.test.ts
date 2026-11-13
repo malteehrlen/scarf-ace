@@ -11,6 +11,15 @@ describe('wrap', () => {
   it('hard-breaks words longer than a line', () => {
     expect(wrap('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij'])
   })
+  it('breaks after hyphens inside words, like the browser', () => {
+    expect(wrap('a well-known fact', 9)).toEqual(['a well-', 'known', 'fact'])
+    expect(wrap('see page-5 now', 8)).toEqual(['see', 'page-5', 'now'])
+    expect(wrap('see page-5 now', 9)).toEqual(['see page-', '5 now'])
+    expect(wrap('the -5 mark', 7)).toEqual(['the -5', 'mark']) // a leading minus is not a break
+    expect(wrap('he said wait--what', 13)).toEqual(['he said wait-', '-what']) // browsers break between, too
+    expect(wrap('ok wait--what', 9)).toEqual(['ok wait--', 'what'])
+    expect(wrap('ok so—yes', 6)).toEqual(['ok so—', 'yes'])
+  })
   it('applies a hanging indent to continuation lines', () => {
     expect(wrap('(aaaa bbbb cccc)', 9, 1)).toEqual(['(aaaa', 'bbbb', 'cccc)'])
   })

@@ -5,6 +5,7 @@ import { onSystemThemeChange, resolveTheme, type ThemePreference } from '../lib/
 
 const theme = defineModel<ThemePreference>('theme', { required: true })
 const vim = defineModel<boolean>('vim', { required: true })
+const reminders = defineModel<boolean>('reminders', { required: true })
 
 const THEMES: { value: ThemePreference; label: string; tip: string }[] = [
   { value: 'system', label: 'System', tip: "Follow your computer's light or dark setting" },
@@ -19,7 +20,7 @@ onBeforeUnmount(stop)
 </script>
 
 <template>
-  <MenuButton label="Settings" tip="Settings: theme and keyboard" align="right" trigger-class="icon-trigger">
+  <MenuButton label="Settings" tip="Settings: theme, reminders and keyboard" align="right" trigger-class="icon-trigger">
     <template #trigger>
       <svg class="menu-icon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
         <circle cx="12" cy="12" r="3" />
@@ -51,6 +52,18 @@ onBeforeUnmount(stop)
       </button>
     </div>
     <div class="menu-separator" role="separator" />
+    <button
+      class="menu-item"
+      role="menuitemcheckbox"
+      :aria-checked="reminders"
+      tabindex="-1"
+      data-tip="After a new page or 30 minutes of writing, suggest downloading a backup"
+      data-tip-side="left"
+      @click="reminders = !reminders"
+    >
+      <span class="checkbox" aria-hidden="true" />
+      <span class="menu-label">Backup reminders</span>
+    </button>
     <button class="menu-item" role="menuitemcheckbox"
       :aria-checked="vim"
       tabindex="-1"

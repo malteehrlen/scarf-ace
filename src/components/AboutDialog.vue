@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { APP_AUTHOR, APP_NAME, APP_VERSION, FEEDBACK_URL } from '../lib/about'
+import { APP_NAME, APP_VERSION, CREATOR_EMAIL, FEEDBACK_URL } from '../lib/about'
 
 const dialog = ref<HTMLDialogElement>()
 defineExpose({ open: () => dialog.value?.showModal() })
@@ -26,7 +26,9 @@ defineExpose({ open: () => dialog.value?.showModal() })
         <h3>The fine print</h3>
         <p>
           {{ APP_NAME }} is free to use. There is exactly one condition: by using it, you agree that if your script gets
-          made, you invite {{ APP_AUTHOR }} to the premiere.
+          made, you invite
+          <a :href="`mailto:${CREATOR_EMAIL}`" :data-tip="`Email ${CREATOR_EMAIL}`">the creator</a>
+          to the premiere.
         </p>
       </div>
 

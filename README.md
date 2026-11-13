@@ -14,9 +14,14 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 - **Autosave** to localStorage, with multiple scripts.
 - **Dark mode.** Follows the system setting by default; pick System / Light / Dark in the ⚙ settings
   menu, and the choice is remembered.
+- **Flexible scene sidebar.** Drag its edge to resize (double-click to reset), hide it with the button in
+  its header (a small button brings it back) or Ctrl+\\. On screens too narrow for the sidebar and a full page, it becomes a drawer over the page.
+- **Zoom.** Fit width (the page fills the writing area, edge to edge) or 75–200%, from the status bar. Line and page breaks
+  never change, only the size.
+- **Focus mode.** Ctrl+Shift+F (⌘⇧F) hides everything but the page; Esc returns (double Esc with Vim on).
 - **Built-in help.** The ? menu (or F1 / Ctrl+/) explains everything; every control has a tooltip.
 - **Backup reminders.** localStorage is easy to lose, so after you add a page or write for 30 active
-  minutes, a card nudges you to download a Fountain backup. Ctrl/⌘+S downloads one any time.
+  minutes, a card nudges you to download a Fountain backup (can be turned off in ⚙ Settings). Ctrl/⌘+S downloads one any time.
 
 ## Keyboard
 
@@ -28,6 +33,8 @@ A free, browser-based screenplay editor. No account, no server — scripts live 
 | Shift+Tab | Cycle element type backwards |
 | Ctrl+Alt+1…7 (⌘⌥ on Mac) | Scene, Action, Character, Parenthetical, Dialogue, Transition, Shot |
 | Ctrl+S / ⌘S | Download a Fountain backup |
+| Ctrl+\\ / ⌘\\ | Show or hide the scenes sidebar |
+| Ctrl+Shift+F / ⌘⇧F | Focus mode (Esc to leave; double Esc with Vim on) |
 | `(` in empty dialogue | Starts a parenthetical; `)` at its end returns to dialogue |
 
 Typing `INT.` / `EXT.` in an action line makes it a scene heading; `CUT TO:` makes a transition.

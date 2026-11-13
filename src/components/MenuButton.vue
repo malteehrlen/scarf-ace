@@ -4,8 +4,16 @@ import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 // A button that opens a menu, with the usual keyboard behavior. Menu items are elements with
 // class "menu-item" (role menuitem / menuitemradio / menuitemcheckbox); activating one closes the menu.
 const props = withDefaults(
-  defineProps<{ label: string; tip?: string; tipKbd?: string; align?: 'left' | 'right'; triggerClass?: string }>(),
-  { tip: undefined, tipKbd: undefined, align: 'left', triggerClass: '' },
+  defineProps<{
+    label: string
+    tip?: string
+    tipKbd?: string
+    align?: 'left' | 'right'
+    /** Which way the menu opens; 'up' for controls at the bottom of the screen. */
+    direction?: 'down' | 'up'
+    triggerClass?: string
+  }>(),
+  { tip: undefined, tipKbd: undefined, align: 'left', direction: 'down', triggerClass: '' },
 )
 
 const open = ref(false)
@@ -99,7 +107,7 @@ defineExpose({ close })
         v-if="open"
         :id="listId"
         class="menu-list"
-        :class="`menu-${props.align}`"
+        :class="[`menu-${props.align}`, `menu-${props.direction}`]"
         role="menu"
         :aria-label="props.label"
         @keydown="onMenuKey"

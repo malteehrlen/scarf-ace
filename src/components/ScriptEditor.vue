@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorView } from 'prosemirror-view'
 import { TextSelection } from 'prosemirror-state'
 import { createState, currentType, elementsFromDoc, flashElement, layoutKey, setType } from '../lib/editor'
@@ -16,7 +16,17 @@ export interface EditorStatus {
   vim: { enabled: boolean; mode: VimMode; pending: string; message: string }
 }
 
-const props = defineProps<{ elements: ScriptElement[]; vim: boolean }>()
+const props = withDefaults(
+  defineProps<{
+    elements: ScriptElement[]
+    vim: boolean
+    /** Space at the bottom of the window covered by something (the backup reminder) to keep the cursor out of. */
+    bottomInset?: number
+    /** Page scale (CSS zoom). Line breaks and pagination don't change, only the size. */
+    zoom?: number
+  }>(),
+  { bottomInset: 0, zoom: 1 },
+)
 const emit = defineEmits<{
   change: [elements: ScriptElement[]]
   status: [status: EditorStatus]
@@ -47,6 +57,7 @@ onMounted(() => {
   view = new EditorView(mount.value!, {
     state: createState(props.elements, { vim: props.vim, onWrite: () => emit('write') }),
     attributes: { class: 'script', spellcheck: 'true' },
+    ...scrollProps(props.bottomInset),
     dispatchTransaction(tr) {
       const state = view!.state.apply(tr)
       view!.updateState(state)
@@ -58,6 +69,23 @@ onMounted(() => {
   view.focus()
 })
 
+// Keep the cursor out of the covered area: start scrolling when it gets there (threshold),
+// and scroll it clear (margin). 5px is ProseMirror's default margin.
+const scrollProps = (inset: number) => ({
+  scrollThreshold: { top: 0, left: 0, right: 0, bottom: inset },
+  scrollMargin: { top: 5, left: 5, right: 5, bottom: 5 + inset },
+})
+watch(
+  () => props.bottomInset,
+  (inset, before) => {
+    if (!view) return
+    view.setProps(scrollProps(inset))
+    // Something just started covering the bottom (after layout, so the extra padding exists): move the cursor clear.
+    if (inset > before) view.dispatch(view.state.tr.scrollIntoView())
+  },
+  { flush: 'post' },
+)
+
 watch(
   () => props.vim,
   (enabled) => {
@@ -65,6 +93,20 @@ watch(
     setVimEnabled(view, enabled)
     view.focus()
   },
+)
+
+// A zoom change keeps the cursor's line at the same height on screen instead of jumping away.
+watch(
+  () => props.zoom,
+  () => {
+    const scroller = view?.dom.closest('.desk')
+    if (!view || !scroller) return
+    const before = view.coordsAtPos(view.state.selection.head).top
+    nextTick(() => {
+      if (view) scroller.scrollTop += view.coordsAtPos(view.state.selection.head).top - before
+    })
+  },
+  { flush: 'pre' },
 )
 
 onBeforeUnmount(() => view?.destroy())
@@ -91,7 +133,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="paper">
+  <div class="paper" :style="props.zoom === 1 ? undefined : { zoom: props.zoom }">
     <div ref="mount" />
   </div>
 </template>

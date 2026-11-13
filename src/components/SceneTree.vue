@@ -8,8 +8,12 @@ const props = defineProps<{
   /** Index of the element containing the cursor. */
   active: number
   pageStarts: { page: number; el: number }[]
+  /** Shortcut shown in the hide button's tooltip. */
+  hideShortcut: string
 }>()
-const emit = defineEmits<{ select: [index: number] }>()
+const emit = defineEmits<{ select: [index: number]; hide: [] }>()
+const hideButton = ref<HTMLButtonElement>()
+defineExpose({ focusHide: () => hideButton.value?.focus() })
 
 const NODE_NAMES: Record<ElementType, string> = {
   scene: 'scene_heading',
@@ -117,6 +121,22 @@ const preview = (text: string) => text || '∅'
         </button>
         <button class="icon" aria-label="Expand all" data-tip="Expand all scenes" @click="expandAll">⊞</button>
         <button class="icon" aria-label="Collapse all" data-tip="Collapse all scenes" @click="collapseAll">⊟</button>
+        <span class="tree-tools-sep" />
+        <button
+          ref="hideButton"
+          class="icon"
+          aria-label="Hide scenes sidebar"
+          aria-controls="scene-sidebar"
+          aria-expanded="true"
+          data-tip="Hide the sidebar"
+          :data-tip-kbd="hideShortcut"
+          @click="emit('hide')"
+        >
+          <svg class="panel-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M9 4v16M16 9l-3 3 3 3" />
+          </svg>
+        </button>
       </div>
     </div>
 

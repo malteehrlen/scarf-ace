@@ -122,27 +122,35 @@ export function stripParens(text: string): string {
   return text.replace(/^\(\s*/, '').replace(/\s*\)$/, '')
 }
 
-/** Word-wrap to a fixed character width; words longer than a line are hard-broken. */
+/**
+ * Word-wrap to a fixed character width, breaking at spaces and after hyphens and dashes inside words
+ * (as browsers do, so the editor and the PDF wrap identically). Words longer than a line are hard-broken.
+ */
 export function wrap(text: string, width: number, hangingIndent = 0): string[] {
-  const words = text.split(' ').filter(Boolean)
   const lines: string[] = []
   let line = ''
   const limit = () => (lines.length === 0 ? width : width - hangingIndent)
-  for (let word of words) {
-    while (word.length > limit()) {
+  for (const word of text.split(' ').filter(Boolean)) {
+    // Break opportunities the browser also uses: after any hyphen inside a word ("well-|known",
+    // "page-|5", "wait-|-what", "wait--|what") and after an em dash ("so—|yes").
+    const parts = word.split(/(?<=\S-)(?=\S)|(?<=—)(?=[^\s—])/)
+    parts.forEach((original, i) => {
+      let part = original
+      const joined = line ? line + (i === 0 ? ' ' : '') + part : part
+      if (joined.length <= limit()) {
+        line = joined
+        return
+      }
       if (line) {
         lines.push(line)
         line = ''
       }
-      lines.push(word.slice(0, limit()))
-      word = word.slice(limit())
-    }
-    if (!line) line = word
-    else if (line.length + 1 + word.length <= limit()) line += ' ' + word
-    else {
-      lines.push(line)
-      line = word
-    }
+      while (part.length > limit()) {
+        lines.push(part.slice(0, limit()))
+        part = part.slice(limit())
+      }
+      line = part
+    })
   }
   if (line || lines.length === 0) lines.push(line)
   return lines

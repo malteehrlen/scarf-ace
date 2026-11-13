@@ -16,10 +16,16 @@ Browser screenplay editor (Vue 3 + Vite + TS, ProseMirror, jsPDF). See README fo
   ⚙ Settings menus are built on it. Items are `.menu-item` elements with menu roles.
 - Tooltips: give every interactive element `data-tip="…"` (optional `data-tip-kbd`, `data-tip-side`),
   rendered by `AppTooltip.vue`. Don't use `title` attributes.
-- `src/lib/about.ts` — app name/version/author and `FEEDBACK_URL` (TODO: set once the GitHub repo is public).
+- `src/lib/about.ts` — app name/version, `CREATOR_EMAIL` and `FEEDBACK_URL` (TODO: set once the GitHub repo is public).
 - `src/lib/backup.ts` — when to remind about Fountain backups (state lives on `Script.backup`).
 - `src/lib/fountain.ts`, `src/lib/pdf.ts` (lazy-loaded), `src/lib/storage.ts` (localStorage).
-- `src/style.css` editor element CSS must stay in sync with `LAYOUT`.
+- `src/style.css` editor element CSS must stay in sync with `LAYOUT`. Column indents/widths are in
+  `ch`, not inches: browsers may round Courier's 9.6px advance to 10px (Linux), and only `ch` keeps
+  the editor's line breaks identical to the PDF at every zoom.
+- `wrap()` in `screenplay.ts` mirrors the browser's break opportunities (spaces, after hyphens inside
+  words, after em dashes). If you change either side, re-check editor vs. paginator line breaks in a
+  real browser with long, punctuation-heavy lines; unit tests alone can't catch a mismatch.
+- `src/lib/zoom.ts` — page zoom (CSS `zoom` on `.paper`): fixed levels or "fit" to the writing area.
 - All colors are theme tokens at the top of `src/style.css` (light + `[data-theme='dark']`). Don't
   hardcode colors in rules; derive tints with `color-mix` from a token. Theme logic: `src/lib/theme.ts`,
   mirrored by the inline script in `index.html` (keep them in sync).

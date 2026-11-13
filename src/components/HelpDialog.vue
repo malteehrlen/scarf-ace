@@ -14,6 +14,8 @@ defineExpose({
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const mod = isMac ? '⌘' : 'Ctrl'
+const focusKey = isMac ? '⌘⇧F' : 'Ctrl+Shift+F'
+const fullscreenKey = isMac ? '⌃⌘F' : 'F11'
 const typeKey = (i: number) => (isMac ? `⌘⌥${i + 1}` : `Ctrl+Alt+${i + 1}`)
 
 const EXAMPLES: Record<ElementType, string> = {
@@ -105,6 +107,20 @@ function jump(id: string) {
           <h3>Finding your way</h3>
           <ul>
             <li><strong>Scenes sidebar.</strong> Every scene with its page and cast. Click the arrow to see its lines, and click any line to jump there.</li>
+            <li>
+              <strong>Hide the sidebar</strong> with the panel button at the end of its header, and bring it back with the
+              small button that stays at the top left (or <kbd>{{ mod }}+\</kbd>). On smaller screens it tucks away by itself and slides in over the page when you open it.
+              Drag its edge to make it wider.
+            </li>
+            <li>
+              <strong>Focus mode</strong> (the corners button in the toolbar, or <kbd>{{ focusKey }}</kbd>) hides everything
+              but the page. Press <kbd>Esc</kbd> to come back (with Vim keybindings on, press it twice quickly). For a truly
+              full screen, add your browser's full-screen mode: <kbd>{{ fullscreenKey }}</kbd>.
+            </li>
+            <li>
+              <strong>Zoom</strong> from the status bar: <em>Fit width</em> makes the page fill the writing area edge to edge
+              (great together with focus mode), or pick a fixed size. Zooming only changes the size on screen; lines and pages stay exactly as printed.
+            </li>
             <li><strong>Follow cursor</strong> (◎ above the scene list) keeps the scene you're writing in open and highlighted. Turn it off to browse freely.</li>
             <li><strong>Page breaks</strong> appear right in the page, in the same places as in the PDF. The status bar shows which page you're on.</li>
             <li><strong>Title page.</strong> Click the script's name in the toolbar (or File › Title page…) to set the title, author, contact details and draft date.</li>
@@ -119,7 +135,7 @@ function jump(id: string) {
           </p>
           <ul>
             <li><strong>File › Download backup</strong> or <kbd>{{ mod }}+S</kbd> saves a <code>.fountain</code> file you can keep anywhere.</li>
-            <li>After a new page or half an hour of writing, a reminder offers to do it for you. The status bar shows when you last backed up.</li>
+            <li>After a new page or half an hour of writing, a reminder offers to do it for you (you can turn reminders off in ⚙ Settings). The status bar shows when you last backed up.</li>
             <li><strong>File › Import Fountain…</strong> opens a backup again, or a script from Trelby, Highland, Fade In and other apps that speak Fountain.</li>
             <li><strong>File › Open…</strong> switches between the scripts saved in this browser.</li>
           </ul>
@@ -143,6 +159,8 @@ function jump(id: string) {
               <tr v-for="(t, i) in ELEMENT_TYPES" :key="t"><td><kbd>{{ typeKey(i) }}</kbd></td><td>{{ ELEMENT_LABELS[t] }}</td></tr>
               <tr><td><kbd>{{ mod }}+S</kbd></td><td>Download a Fountain backup</td></tr>
               <tr><td><kbd>{{ mod }}+Z</kbd> / <kbd>{{ isMac ? '⌘⇧Z' : 'Ctrl+Y' }}</kbd></td><td>Undo / redo</td></tr>
+              <tr><td><kbd>{{ mod }}+\</kbd></td><td>Show or hide the scenes sidebar</td></tr>
+              <tr><td><kbd>{{ focusKey }}</kbd></td><td>Focus mode (<kbd>Esc</kbd> to leave)</td></tr>
               <tr><td><kbd>F1</kbd> or <kbd>{{ mod }}+/</kbd></td><td>This help</td></tr>
             </tbody>
           </table>
