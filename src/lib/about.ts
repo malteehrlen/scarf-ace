@@ -5,5 +5,8 @@ export const APP_VERSION: string = pkg.version
 /** How to reach the creator (e.g. with premiere invitations). */
 export const CREATOR_EMAIL = 'malte+scarface@ehrlen.com'
 
-/** Where feedback goes. TODO: set to the GitHub issues URL once the repository is public. */
-export const FEEDBACK_URL: string | null = null
+export const REPO_URL = 'https://github.com/malteehrlen/scarf-ace'
+/** Where feedback goes: the repository's issue tracker. */
+export const FEEDBACK_URL = `${REPO_URL}/issues`
+/** GitHub Pages logs visitors' IP addresses; the About dialog links to this. */
+export const HOSTING_PRIVACY_URL = 'https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement'

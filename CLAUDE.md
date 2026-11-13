@@ -16,7 +16,9 @@ Browser screenplay editor (Vue 3 + Vite + TS, ProseMirror, jsPDF). See README fo
   ⚙ Settings menus are built on it. Items are `.menu-item` elements with menu roles.
 - Tooltips: give every interactive element `data-tip="…"` (optional `data-tip-kbd`, `data-tip-side`),
   rendered by `AppTooltip.vue`. Don't use `title` attributes.
-- `src/lib/about.ts` — app name/version, `CREATOR_EMAIL` and `FEEDBACK_URL` (TODO: set once the GitHub repo is public).
+- `src/lib/about.ts` — app name/version, `CREATOR_EMAIL`, `REPO_URL`/`FEEDBACK_URL` (GitHub issues) and the
+  hosting privacy link. The About dialog's privacy note says the app collects no data: keep it true
+  (no analytics, cookies or third-party requests; fonts are self-hosted).
 - `src/lib/markup.ts` — inline Fountain markup in element text: emphasis (shown as ProseMirror marks,
   serialized back to `**`/`*`/`_`), `[[notes]]` and `#scene numbers#` (kept as text, decorated, never
   printed). `printable()` in `screenplay.ts` turns an element into what prints (plus style spans).

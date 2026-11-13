@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { APP_NAME, APP_VERSION, CREATOR_EMAIL, FEEDBACK_URL } from '../lib/about'
+import { APP_NAME, APP_VERSION, CREATOR_EMAIL, FEEDBACK_URL, HOSTING_PRIVACY_URL, REPO_URL } from '../lib/about'
 
 const dialog = ref<HTMLDialogElement>()
 const BASE = import.meta.env.BASE_URL
@@ -17,11 +17,19 @@ defineExpose({ open: () => dialog.value?.showModal() })
       </p>
 
       <h3>Feedback</h3>
-      <p v-if="FEEDBACK_URL">
+      <p>
         Found a bug or have an idea?
-        <a :href="FEEDBACK_URL" target="_blank" rel="noopener" data-tip="Opens GitHub in a new tab">Open an issue on GitHub</a>.
+        <a :href="FEEDBACK_URL" target="_blank" rel="noopener" data-tip="GitHub issues (opens in a new tab)">Open an issue on GitHub</a>.
+        The <a :href="REPO_URL" target="_blank" rel="noopener" data-tip="The source code on GitHub (opens in a new tab)">source code</a>
+        is there too.
       </p>
-      <p v-else>Found a bug or have an idea? Feedback goes through GitHub. The link is coming soon.</p>
+
+      <h3>Privacy</h3>
+      <p>
+        {{ APP_NAME }} collects no data. Your scripts and settings stay in your browser and are never sent anywhere. The site
+        is hosted on GitHub Pages, which logs visitors' IP addresses for security
+        (<a :href="HOSTING_PRIVACY_URL" target="_blank" rel="noopener" data-tip="GitHub's privacy statement (opens in a new tab)">GitHub's privacy statement</a>).
+      </p>
 
       <div class="fine-print">
         <h3>The fine print</h3>

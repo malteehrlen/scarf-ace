@@ -102,6 +102,14 @@ Scripts live in the browser's localStorage for the site's origin. Moving the app
 (e.g. adding a custom domain later) starts with an empty library there, so users would need to
 re-import their Fountain backups.
 
+## Privacy
+
+Scarf Ace collects no data: no analytics, no cookies, no third-party requests. Scripts and settings stay
+in the browser's localStorage and are never sent anywhere. The hosted version runs on GitHub Pages,
+which logs visitors' IP addresses for security
+([GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)).
+Feedback and bug reports: [GitHub issues](https://github.com/malteehrlen/scarf-ace/issues).
+
 ## License
 
 [MIT](LICENSE) © 2026 Malte Ehrlen.
